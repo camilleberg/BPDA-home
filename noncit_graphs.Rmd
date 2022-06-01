@@ -19,8 +19,8 @@ library(tidyverse)
 stringcsv <- function(year) {
   dat <- read.csv(paste0("noncit", year))
   dat <- dat %>% 
-    mutate(GEOID = paste(GEOID))
-  write.csv(dat, paste0("noncit", year))
+    mutate(ID = paste(ID))
+  write.csv(dat, paste0("noncit", year, "_updated"))
 }
 ```
 
