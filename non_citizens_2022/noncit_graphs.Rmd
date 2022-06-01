@@ -1,0 +1,84 @@
+---
+title: "Non-Citizens Mapping"
+author: "Camille Bergeron"
+date: "6/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# libraries
+library(tidyverse)
+library(tidycensus)
+library(plotly)
+library(knitr)
+library(tmaptools)
+library(GGally)
+
+Sys.setenv("MAPBOX_TOKEN" = "pk.eyJ1IjoiY2Jlcmdlcm9uMjkwMCIsImEiOiJja2lrdDR2aHQwZDJ6MnFxd2xqYTAxbXE2In0.JAMa9qlFdDtzdyQnk6dSCg")
+
+```
+
+# Data Prep
+
+## Converting GEOID
+
++ this uses Table _B05001_ from the Census with 5 year ACS tables
+
+```{r}
+# this is a function to convert IDS to string
+
+string_csv <- function(year) {
+  dat <- read.csv(paste0("noncit", year, ".csv"))
+  dat <- dat %>% 
+    mutate(ID = as.character(ID))
+  write.csv(dat, paste0("noncit", year, "_updated.csv"))
+}
+
+years <- c("2010", "2015", "2020")
+
+for(i in 1:length(years)){
+  string_csv(years[i])
+}
+
+```
+
+## examing the data
+
+```{r}
+noncit2020 <- read.csv("noncit2020_updated.csv")
+typeof(noncit2020$ID)
+```
+
+## or getting datat this way 
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+noncit2020 <- get_acs(
+  geography = "tract",
+  variables = "B05001_006E",
+  year = 2020,
+  state = "MA", 
+  county = "Suffolk",
+  survey = "acs5",
+  geometry = TRUE
+)
+# this is consistent! 
+```
+# mapping
+
++ https://walker-data.com/census-r/mapping-census-data-with-r.html
+
+```{r}
+plot(noncit2020)
+# we want just the estimate 
+
+plot(noncit2020$estimate)
+# but this just returns dot plot 
+
+plot_mapbox(noncit2020)
+
+ggplot(noncit2020, aes(fill = estimate)) +
+  geom_sf()
+```
+
