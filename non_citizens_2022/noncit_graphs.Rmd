@@ -54,7 +54,7 @@ typeof(noncit2020$ID)
 ## or getting datat this way 
 
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE}
-noncit2020 <- get_acs(
+noncit2020_map <- get_acs(
   geography = "tract",
   variables = "B05001_006E",
   year = 2020,
@@ -64,21 +64,31 @@ noncit2020 <- get_acs(
   geometry = TRUE
 )
 # this is consistent! 
+
+# writing out csv
+write_csv(get_acs(
+  geography = "tract",
+  variables = "B05001_006E",
+  year = 2020,
+  state = "MA", 
+  county = "Suffolk",
+  survey = "acs5",
+), "noncit2020_updated.csv")
 ```
 # mapping
 
 + https://walker-data.com/census-r/mapping-census-data-with-r.html
 
 ```{r}
-plot(noncit2020)
+plot(noncit2020_map)
 # we want just the estimate 
 
-plot(noncit2020$estimate)
+plot(noncit2020_map$estimate)
 # but this just returns dot plot 
 
-plot_mapbox(noncit2020)
+plot_mapbox(noncit2020_map)
 
-ggplot(noncit2020, aes(fill = estimate)) +
+ggplot(noncit2020_map, aes(fill = estimate)) +
   geom_sf()
 ```
 
