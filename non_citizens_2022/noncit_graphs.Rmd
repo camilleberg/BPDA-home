@@ -66,14 +66,7 @@ noncit2020_map <- get_acs(
 # this is consistent! 
 
 # writing out csv
-write_csv(get_acs(
-  geography = "tract",
-  variables = "B05001_006E",
-  year = 2020,
-  state = "MA", 
-  county = "Suffolk",
-  survey = "acs5",
-), "noncit2020_updated.csv")
+write_csv(noncit2020_map, "noncit2020_tidycensus.csv")
 ```
 # mapping
 
