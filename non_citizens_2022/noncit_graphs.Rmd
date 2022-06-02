@@ -18,6 +18,7 @@ library(GGally)
 
 Sys.setenv("MAPBOX_TOKEN" = "pk.eyJ1IjoiY2Jlcmdlcm9uMjkwMCIsImEiOiJja2lrdDR2aHQwZDJ6MnFxd2xqYTAxbXE2In0.JAMa9qlFdDtzdyQnk6dSCg")
 
+setwd("~/GitHub/BPDA-home/non_citizens_2022")
 ```
 
 # Data Prep
@@ -66,7 +67,14 @@ noncit2020_map <- get_acs(
 # this is consistent! 
 
 # writing out csv
-write_csv(noncit2020_map, "noncit2020_tidycensus.csv")
+write_csv(get_acs(
+  geography = "tract",
+  variables = "B05001_006E",
+  year = 2020,
+  state = "MA", 
+  county = "Suffolk",
+  survey = "acs5",
+), "noncit2020_tidycensus.csv")
 ```
 # mapping
 
