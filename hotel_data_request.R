@@ -1,6 +1,6 @@
 # this script is for grabbing hotel data
 
-## the objective 
+## the objective -----
 #  the hotel properties, rooms, 
 # occupancy rate and average daily rate and revpar 
 # for the different areas of Boston 
@@ -8,18 +8,17 @@
 
 
 ## obj #2 -----
-# select only hotel occ, combine seaport and logan, pivot wider month dow
+# select only hotel occ, combine seaport and logan, pivot wider month down
 
 # loading libraries and setting dir
-rm(list =ls())
 library(tidyverse)
 library(readxl)
 library(writexl)
-library(lubridate)
+
+rm(list =ls())
 
 proj_dir <- getwd()
 setwd("C:/Users/camilleb/Box/Research/Active Projects/Economic Indicators/01. Other Indicators/Hotels/05. Pinnacle Data")
-list.files()
 
 reading_fxn <- function(this_year) {
 
@@ -42,12 +41,12 @@ reading_fxn <- function(this_year) {
   colnames(dat) <- c("Month", "Submarket", "Properties", "avail_rooms", "occ_rate", "rooms_sold", "avg_daily_rate", 
                      "RevPAR", "total_rev", "Year")
   
-  # selecting out the vars of interest and getting rod of total boston numbers 
+  # selecting out the vars of interest and getting rid of total boston numbers 
   dat <- dat %>%
     mutate(Date = paste(Month, Year)) %>%
     select(Date, Submarket, Properties, avail_rooms, occ_rate, rooms_sold, avg_daily_rate, RevPAR) %>%
-    filter(Submarket != "Boston Total") %>%
-    filter(!grepl(x = Date, pattern = "Perspective")) # maybe add grepl / reg expression here for the new foramtting in 2022
+    # filter(Submarket != "Boston Total") %>%
+    filter(!grepl(x = Date, pattern = "Perspective")) # accounting for formatitting issue 
     
   return(dat)
 
@@ -68,13 +67,10 @@ for(i in 1:length(years_of_int)) {
 # dropping the first NA initialization row 
 df <- df[-1, ]
 
-# factoring so dates stay in order
-
-write_xlsx(df, "Pinnacle Hotel Historical Request 2019 to April 2022_data.xlsx")
+# write_xlsx(df, "Pinnacle Hotel Historical Request 2019 to April 2022_all.xlsx")
 
 
 ## executing obective 2 ###################
-df$order <- 1:nrow(df)
 
 # commbing logan and seaport (in 2022)
 occ_seaport <-  df %>%
@@ -94,6 +90,6 @@ occ_rate_all <- rbind(occ_not_Seaport, occ_seaport)
 occ_rate_all <- occ_rate_all %>%
   pivot_wider(names_from = Submarket, values_from = occ_rate) 
 
-write_xlsx(occ_rate_all, "Pinnacle Hotel Historical Request 2019 to April 2022_new.xlsx")
+write_xlsx(occ_rate_all, "Pinnacle Hotel Historical Request 2019 to April 2022.xlsx")
 
 setwd(proj_dir)
