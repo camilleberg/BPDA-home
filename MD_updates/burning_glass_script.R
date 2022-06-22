@@ -21,7 +21,7 @@ dat <- read_excel(wb_name, sheet = "Report3_Data")
 dat <- dat %>%
   as_tibble(dat) %>%
   select(`NAICS Code`, `Industry`, `Job Postings`) %>%
-  mutate(`Job POstings` = as.numeric(`JOb Postings`)) %>%
+  mutate(`Job Postings` = as.numeric(`Job Postings`)) %>%
   arrange(`NAICS Code`) %>% t() %>% as_tibble()
 colnames(dat) <- dat[1, ]
 dat <- dat[-1, ]
