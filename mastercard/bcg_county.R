@@ -33,7 +33,8 @@ industry_fxn <- function(dat, ind) {
     filter(industry == paste(ind)))
 }
 
-sample <- industry_fxn(dat, "pst")
+tax_amt_dat <- tibble(list(unique(dat$industry)))
+# to write out into one df instead of multiple csvs... idk why I did that 
 
 for(i in 1:length(unique(dat$industry))) {
   write.csv(industry_fxn(dat, unique(dat$industry)[i]), paste0("county-level_weekly_", unique(dat$industry)[i], "_2022.06.21.csv"))
