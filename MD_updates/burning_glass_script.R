@@ -36,3 +36,4 @@ dat_total <- dat_total %>%
   mutate(Value = as.numeric(Value))
 
 write_xlsx(list(industries = dat, totals = dat_total), paste0("MD ", today, " week_sorted.xlsx"))
+
