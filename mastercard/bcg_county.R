@@ -33,14 +33,17 @@ industry_fxn <- function(dat, ind) {
     filter(industry == paste(ind)))
 }
 
-tax_amt_dat <- tibble(list(unique(dat$industry)))
-# to write out into one df instead of multiple csvs... idk why I did that 
+# restting wd, so the new csv files can be written into the proj dir
+setwd(proj_dir)
 
+# this creates new csvs for each industry type 
 for(i in 1:length(unique(dat$industry))) {
   write.csv(industry_fxn(dat, unique(dat$industry)[i]), paste0("county-level_weekly_", unique(dat$industry)[i], "_2022.06.21.csv"))
 }
 
-# form mastercrad code, to export rates 
+# from mastercrad code, to export rates 
+
+# this is for txn_amt
 rate_fxn <- function(industry) {
 
   dat <- read.csv(paste0("county-level_weekly_", industry, "_2022.06.21.csv"))
@@ -61,6 +64,7 @@ rate_fxn <- function(industry) {
   return(dat_csv)
 }
 
+# this is for txn_count
 rate_cnt_fxn <- function(industry) {
   
   dat <- read.csv(paste0("county-level_weekly_", industry, "_2022.06.21.csv"))
@@ -81,8 +85,36 @@ rate_cnt_fxn <- function(industry) {
   return(dat_csv)
 }
 
-# running through all the csvs to calculate rates 
+txn_amt_dat <- tibble()
+txn_cnt_dat <- tibble()
+
+# running through all the csvs to calculate rates and exporting it to one csv
 
 for(i in 1:length(unique(dat$industry))) {
-  write.csv(rate_cnt_fxn(unique(dat$industry)[i]), paste0("county-level_weekly_", unique(dat$industry)[i], "_2022.06.21_count_rates.csv"))
+  if(i == 1) {
+    txn_amt_dat <- rate_fxn(unique(dat$industry)[i])
+  } else {
+    txn_amt_dat<-  cbind(txn_amt_dat, rate_fxn(unique(dat$industry)[i]))
+  }
+  # write.csv(rate_fxn(unique(dat$industry)[i]), paste0("county-level_weekly_", unique(dat$industry)[i], "_2022.06.21_rates.csv"))
 }
+
+# renaming columns to propeor industry title
+colnames(txn_amt_dat) <- unique(dat$industry)
+write.csv(txn_amt_dat, "county-weekly_all_rates_2022.06.21.csv")
+
+
+## for count rates 
+for(i in 1:length(unique(dat$industry))) {
+  if(i == 1) {
+    txn_cnt_dat <- rate_cnt_fxn(unique(dat$industry)[i])
+  } else {
+    txn_cnt_dat <- cbind(txn_cnt_dat, rate_cnt_fxn(unique(dat$industry)[i]))
+  }
+  # write.csv(rate_fxn(unique(dat$industry)[i]), paste0("county-level_weekly_", unique(dat$industry)[i], "_2022.06.21_rates.csv"))
+}
+
+# renaming columns to propeor industry title
+colnames(txn_cnt_dat) <- unique(dat$industry)
+write.csv(txn_cnt_dat, "county-weekly_all_cnt_rates_2022.06.21.csv")
+

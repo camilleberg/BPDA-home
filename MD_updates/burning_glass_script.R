@@ -32,7 +32,7 @@ colnames(dat_total) <- c("Name", "Value")
 
 # organizing and cleaning 
 dat_total <- dat_total %>%
-  filter(Name %in% c("Postings available with the current filters applied:", "Top Detailed Industries")) %?%
+  filter(Name %in% c("Postings available with the current filters applied:", "Top Detailed Industries")) %>%
   mutate(Value = as.numeric(Value))
 
 write_xlsx(list(industries = dat, totals = dat_total), paste0("MD ", today, " week_sorted.xlsx"))
