@@ -64,7 +64,7 @@ dat_join <- left_join(dat, nbhds, "geoid")
 
 # function to calculate and return the rates 
 rate_fxn <- function(df, ind) {
-  dat <- dat_join %>%  #df 
+  dat <- df %>%  
     # this reformat the data so we can then calculate the rates 
     select(industry, month, year, txn_cnt) %>%
     # filter(industry == paste0(ind)) %>%               # this was commented out for edits 
