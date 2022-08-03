@@ -88,13 +88,13 @@ rate_fxn <- function(df, ind) {
 
 
 # this is for all boston
-rate_ret <- rate_fxn(dat_join %>% filter(bg10_nbhd %notin% "None"), "ret")
-rate_gro <- rate_fxn(dat_join %>% filter(bg10_nbhd %notin% "None"), "gro")
-rate_eap <- rate_fxn(dat_join %>% filter(bg10_nbhd %notin% "None"), "eap")
+rate_ret <- rate_fxn(dat_join %>% filter(!is.na(bg10_nbhd)), "ret")
+rate_gro <- rate_fxn(dat_join %>% filter(!is.na(bg10_nbhd)), "gro")
+rate_eap <- rate_fxn(dat_join %>% filter(!is.na(bg10_nbhd)), "eap")
 
 # making all bosotn csv
 # all_boston <- rbind(rate_ret, rate_eap, rate_gro)
-all_boston <- rate_fxn(dat_join %>% filter(bg10_nbhd %notin% "None"), "ret")
+all_boston <- rate_fxn(dat_join %>% filter(!is.na(bg10_nbhd)), "ret")
 
 # for all the neighborhoods now 
 
