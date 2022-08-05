@@ -104,8 +104,10 @@ dates_less <- inflation_dat %>%
   select(date) 
 
 inspect <- inflation_dat[which(inflation_dat$date %in% dates_less$date), ]
-inspect <- inspect %>%
-  group_by(V1) %>%
-  summarise(n =n()) 
 
-# renorm ing 
+checkc <- inspect %>%
+  group_by(V1) %>%
+  summarise(n = n())
+
+# renorming 
+
