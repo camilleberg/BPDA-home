@@ -66,10 +66,10 @@ dat_join <- left_join(dat, nbhds, "geoid")
 rate_fxn <- function(df, ind) {
   dat <- df %>%  
     # this reformat the data so we can then calculate the rates 
-    select(industry, month, year, txn_cnt) %>%
+    select(industry, month, year, txn_cnt) %>%   # change back to cnt
     # filter(industry == paste0(ind)) %>%               # this was commented out for edits 
     group_by(industry, month, year) %>%
-    summarise(n = sum(txn_cnt)) %>%
+    summarise(n = sum(txn_cnt)) %>%   # change back to count
     pivot_wider(names_from = year, values_from = n) %>%
     # this is the actual rate calculation
     mutate(`2020` = `2020` / `2019` - 1) %>%

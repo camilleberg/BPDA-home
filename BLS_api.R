@@ -11,7 +11,7 @@ library(tidyverse)
 library(rjson)
 library(readxl)
 library(lubridate)
-
+library(writexl)
 
 proj_dir <-  "C:/Users/camilleb/Documents/GitHub/BPDA-home"
 proj_folder_dir <- "C:/Users/camilleb/Box/Research/Active Projects/Mastercard/Program/Inflation"
@@ -103,11 +103,79 @@ dates_less <- inflation_dat %>%
   filter(n < 22) %>%
   select(date) 
 
-inspect <- inflation_dat[which(inflation_dat$date %in% dates_less$date), ]
+# expected 924 rows, only have 901 - figure out why later 
 
-checkc <- inspect %>%
+# inspect <- inflation_dat[which(inflation_dat$date %in% dates_less$date), ]
+# 
+# checck <- inspect %>%
+#   group_by(V1) %>%
+#   summarise(n = n())
+#
+# fixed, refer to the bottom of the page, has to do with missing time series data 
+
+##### Analyzing the data
+
+# renormign the data
+
+# 2019 January values to renorm 
+val_2019 <- inflation_dat %>%
+  filter(year == 2019 & period == "January") %>%
+  select(V1, value) %>%
+  mutate(value = as.numeric(value)) %>%
+  mutate(adj_val = value - 100)
+
+# combining and subtracting 
+inflation_dat <- inflation_dat %>%
+  left_join(val_2019, by = "V1", suffix = c(".all", ".2019")) %>%
+  mutate(value.all = as.numeric(value.all)) %>%
+  mutate(norm_value = value.all - adj_val) %>%
+  select(-c(value.all, value.2019, adj_val))
+
+# graphign to see if there are msiing values   
+library(plotly)
+
+p_expend <- inflation_dat %>% 
+  mutate(serial_no_1 = V1) %>%
+  left_join(serial_nos, by = "serial_no_1") %>%
+  select(V1, date, norm_value, `Expenditure Category`) %>%
+  plot_ly(x = ~date, 
+          y = ~norm_value, 
+          split = ~`Expenditure Category`, 
+          type = 'scatter', 
+          mode = 'lines') 
+p_ind <-  inflation_dat %>% 
+  mutate(serial_no_1 = V1) %>%
+  left_join(serial_nos, by = "serial_no_1") %>%
+  select(V1, date, norm_value, industry) %>%
+  plot_ly(x = ~date, 
+          y = ~norm_value, 
+          split = ~industry, 
+          type = 'scatter', 
+          mode = 'lines')  
+subplot(p_expend, p_ind, nrows = 2, shareX= TRUE) %>%
+  layout(xaxis = list(title = "Period"), 
+         yaxis = list(title = "Inflationary Index Based on January 2019"), 
+         title = "Non-Seasonally Adjusted Inflationary Indices from January 2019 to June 2022")
+
+# writing out the data 
+inflation_dat %>% 
+  mutate(serial_no_1 = V1) %>%
+  left_join(serial_nos, by = "serial_no_1") %>%
+  select(V1, date, norm_value, `Expenditure Category`, rel_imp) %>% 
+  write_xlsx(paste0(proj_folder_dir, "/inflation_idx_jan2019_june2022.xlsx"))
+
+# writing out the non html plots
+# kaleido(p_expend, file = paste0(proj_folder_dir, "/ind_expend.png"))
+p_expend
+p_ind
+
+###### Looking at weird data
+
+inflation_dat %>%
   group_by(V1) %>%
-  summarise(n = n())
+  summarise(n = n()) %>%
+  filter(n!=42)
 
-# renorming 
+carsData <- blsAPI(list('seriesid'='CUUR0000SETA03','startyear' = '2019', 'endyear'= '2022') )
+carsDataSeries <- fromJSON(carsData) 
 

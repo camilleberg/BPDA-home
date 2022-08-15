@@ -1,0 +1,147 @@
+---
+title: "Inflation Graphs"
+author: "Camille Bergeron"
+date: "August 2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+
+# libraries 
+rm(list  = ls())
+library(plotly)
+library(tidyverse)
+library(readxl)
+library(knitr)
+library(lubridate)
+```
+
+
+```{r}
+# labeling directories 
+proj_dir <-  "C:/Users/camilleb/Documents/GitHub/BPDA-home"
+proj_folder_dir <- "C:/Users/camilleb/Box/Research/Active Projects/Mastercard/Program/Inflation"
+#  setwd("F:/Deptment/Research/Data/MasterCard/")
+```
+
+
+# The Data
+
+```{r}
+# loading in the Mastercard data 
+cnt_dat <- readxl::read_xlsx("C:/Users/camilleb/Box/Research/Active Projects/Greater_downtown_Request_2022/in_person_spending_commercial_hubs_all_industries.xlsx", sheet = "boston")
+
+amt_dat <- readxl::read_xlsx("C:/Users/camilleb/Box/Research/Active Projects/Greater_downtown_Request_2022/in_person_spending_commercial_hubs_all_industries_amt.xlsx", sheet = "boston")
+
+# loading in the inflation data
+inflation_dat <- read_xlsx(paste0(proj_folder_dir, "/inflation_idx_jan2019_june2022.xlsx"))
+
+# loading the serial / industry data
+industry_dat <- readxl::read_excel(paste0(proj_folder_dir, "/cpi-u-202206.xlsx"), sheet = "index_wanted")
+```
+
+```{r}
+# joining the industry data and the inflation
+inflation_dat_full <- inflation_dat %>%
+  mutate(serial_no_1 = V1) %>%
+  left_join(industry_dat %>% select(serial_no_1, industry), by = "serial_no_1") %>%
+  select(-V1)
+
+# weighting the mwans for multi-item baskets 
+inflation_dat_full <-  inflation_dat_full %>%
+  group_by(industry, date) %>%
+  mutate(inflation = weighted.mean(norm_value, rel_imp)) 
+
+# this is equivalent to (x * x_weight + y *  y_weight) / (x_weight + y_weight)
+# this code has also been checked with cbs and app industries
+
+inflation_dat_full %>% head() %>% kable()
+
+# joining count and amount data
+spending_dat <- cbind(cnt_dat %>% mutate(txn_cnt = count) %>% select(-count), 
+      amt_dat %>% mutate(txn_amt = count) %>% select(txn_amt))
+
+spending_dat %>% head() %>% kable()
+
+# gettign rid of original dfs
+rm(cnt_dat, amt_dat, inflation_dat, industry_dat)
+
+```
+
+# Graphing 
+
+```{r}
+# writing a function to plot the graphs by industry 
+
+graphing_fxn <- function(ind) {
+  dat <- spending_dat %>% filter(industry == paste0(ind)) %>%
+    left_join(inflation_dat_full %>% filter(industry == paste(ind)) %>% select(date, inflation, rel_imp), by = "date") %>%
+    mutate(txn_amt_adj = txn_amt * inflation / 100) 
+    # this basically combines the data and creates a new df with all relevant data 
+  
+  p <- dat %>%
+    plot_ly(
+    x = ~date, 
+    y = ~txn_cnt, name = "Counts", 
+    type = 'scatter', mode = 'lines'
+  ) %>%
+    add_trace(y = ~txn_amt, name = "Amount ($)") %>%
+    add_trace(y = ~txn_amt_adj, name = 'Adj. Amount ($)') %>%
+    layout(yaxis = list(title = "Index"),
+           xaxis = list(title = "Date"))
+  
+  return(p)
+}
+
+
+graphing_fxn_ggplot <- function(ind) {
+   dat <- spending_dat %>% filter(industry == paste0(ind)) %>%
+    left_join(inflation_dat_full %>% filter(industry == paste(ind)) %>% select(date, inflation, rel_imp), by = "date") %>%
+    mutate(txn_amt_adj = txn_amt * inflation / 100) 
+    # this basically combines the data and creates a new df with all relevant data 
+  
+  p <- dat %>%
+    pivot_longer(cols = starts_with("txn"), names_to = "label", values_to = "idx") %>%
+    ggplot(aes(x = date)) +
+    geom_line(aes(y = idx, group = label, color = label)) +
+    labs(y = "Value", x = "Date")
+  
+  return(p)
+}
+
+```
+
+
+## All Spending
+
++ Combined / weighted for all included goods for "all spending"? Or use general city - average inflation rate
+
+```{r}
+# graphing_fxn("ret")
+graphing_fxn_ggplot("ret")
+```
+
+
+## Groceries
+
+```{r}
+# adjusting the grocery numbers 
+# graphing_fxn("gro")
+graphing_fxn_ggplot("gro")
+
+```
+
+## Resturants 
+
+```{r}
+# graphing_fxn("eap")
+graphing_fxn_ggplot("eap")
+```
+
+## Apparel 
+
+```{r}
+# graphing_fxn("app")
+graphing_fxn_ggplot("app")
+```
