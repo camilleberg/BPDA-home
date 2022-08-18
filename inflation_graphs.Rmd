@@ -77,7 +77,7 @@ rm(cnt_dat, amt_dat, inflation_dat, industry_dat)
 graphing_fxn <- function(ind) {
   dat <- spending_dat %>% filter(industry == paste0(ind)) %>%
     left_join(inflation_dat_full %>% filter(industry == paste(ind)) %>% select(date, inflation, rel_imp), by = "date") %>%
-    mutate(txn_amt_adj = txn_amt * inflation / 100) 
+    mutate(txn_amt_adj = txn_amt / inflation * 100) 
     # this basically combines the data and creates a new df with all relevant data 
   
   p <- dat %>%
@@ -98,7 +98,7 @@ graphing_fxn <- function(ind) {
 graphing_fxn_ggplot <- function(ind) {
    dat <- spending_dat %>% filter(industry == paste0(ind)) %>%
     left_join(inflation_dat_full %>% filter(industry == paste(ind)) %>% select(date, inflation, rel_imp), by = "date") %>%
-    mutate(txn_amt_adj = txn_amt * inflation / 100) 
+    mutate(txn_amt_adj = txn_amt / inflation * 100) 
     # this basically combines the data and creates a new df with all relevant data 
   
   p <- dat %>%
