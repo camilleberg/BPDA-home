@@ -107,7 +107,8 @@ graphing_fxn_ggplot <- function(ind) {
     pivot_longer(cols = starts_with("txn"), names_to = "label", values_to = "idx") %>%
     ggplot(aes(x = date)) +
     geom_line(aes(y = idx, group = label, color = label)) +
-    labs(y = "Value", x = "Date")
+    labs(y = "Value", x = "Date") +
+    geom_hline(yintercept = 0, color = "black")
   
   return(p)
 }
