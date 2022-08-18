@@ -74,6 +74,8 @@ rm(cnt_dat, amt_dat, inflation_dat, industry_dat)
 ```{r}
 # writing a function to plot the graphs by industry 
 
+ind <- "eap"
+
 graphing_fxn <- function(ind) {
   dat <- spending_dat %>% filter(industry == paste0(ind)) %>%
     left_join(inflation_dat_full %>% filter(industry == paste(ind)) %>% select(date, inflation, rel_imp), by = "date") %>%
@@ -127,7 +129,7 @@ graphing_fxn_ggplot("ret")
 
 ```{r}
 # adjusting the grocery numbers 
-# graphing_fxn("gro")
+#graphing_fxn("gro")
 graphing_fxn_ggplot("gro")
 
 ```
@@ -135,7 +137,7 @@ graphing_fxn_ggplot("gro")
 ## Resturants 
 
 ```{r}
-# graphing_fxn("eap")
+#graphing_fxn("eap")
 graphing_fxn_ggplot("eap")
 ```
 
