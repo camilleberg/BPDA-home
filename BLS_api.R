@@ -121,15 +121,14 @@ dates_less <- inflation_dat %>%
 val_2019 <- inflation_dat %>%
   filter(year == 2019 & period == "January") %>%
   select(V1, value) %>%
-  mutate(value = as.numeric(value)) %>%
-  mutate(adj_val = value - 100)
+  mutate(value = as.numeric(value))
 
 # combining and subtracting 
 inflation_dat <- inflation_dat %>%
   left_join(val_2019, by = "V1", suffix = c(".all", ".2019")) %>%
   mutate(value.all = as.numeric(value.all)) %>%
-  mutate(norm_value = value.all - adj_val) %>%
-  select(-c(value.all, value.2019, adj_val))
+  mutate(norm_value = value.all / value.2019 * 100) %>%
+  select(-c(value.all, value.2019))
 
 # graphign to see if there are msiing values   
 library(plotly)
