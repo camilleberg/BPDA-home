@@ -1,0 +1,94 @@
+---
+title: "graphs student loans"
+author: "Camille Bergeron"
+date: "2022-09-12"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+# Student Loans
+
+## United States
+
++ the numbers following the graphs count the number of blue dots (i.e. the geogrpahies where the communities of color have a higher median or share than majority white communities)
++ the fraction after is the proportion to all of the available data
+
+```{r}
+# Student loan script
+# this is to do exploratory data anlyssi for student loan stuff
+
+# Camille Bergeron
+# September 2022
+
+rm(list = ls())
+library(tidyverse)
+library(plotly)
+library(readxl)
+
+dat_raw <- read_xlsx("C:/Users/camilleb/Box/Research/Active Projects/Higher Education in Boston_2022/03. Data/county_dia_student_ 7 Jun 2022.xlsx")
+
+# batch making the columns numeric 
+
+dat <- sapply(dat_raw %>% select(-c(NAME, state_name)), as.numeric) %>%
+  as_tibble()
+
+dat$NAME = dat_raw$NAME
+dat$state_name = dat_raw$state_name
+
+# graphs
+
+dat %>%
+  # filter(state_name %in% state.name[state.region == "Northeast"]) %>%
+  mutate(highlight = ifelse(`Median Student Loan Debt, Communties of Color`>`Median Student Loan Debt, Majority White Communities`, 1, 0)) %>%
+  ggplot(aes(x = `Median Student Loan Debt, Communties of Color`, y = `Median Student Loan Debt, Majority White Communities`)) +
+  geom_point(aes(group = state_name, color = highlight)) +
+  geom_abline(intercept = 0, slope = 1)
+
+n_median <- sum(dat %>% mutate(highlight = ifelse(`Median Student Loan Debt, Communties of Color`>`Median Student Loan Debt, Majority White Communities`, 1, 0)) %>% select(highlight), na.rm = TRUE)
+n_median_tot <- sum(dat %>% mutate(highlight = ifelse(`Median Student Loan Debt, Communties of Color`>`Median Student Loan Debt, Majority White Communities`, 1, 1)) %>% select(highlight), na.rm = TRUE)
+
+n_median
+n_median / n_median_tot
+
+dat %>%
+  # filter(state_name %in% state.name[state.region == "Northeast"]) %>%
+  mutate(highlight = ifelse(`Share with Student Loan Debt, Communities of Color`>`Share with Student Loan Debt, Majority White Communities`, 1, 0)) %>%
+  ggplot(aes(x = `Share with Student Loan Debt, Communities of Color`, y = `Share with Student Loan Debt, Majority White Communities`)) +
+  geom_point(aes(group = state_name, color = highlight)) +
+  geom_abline(intercept = 0, slope = 1)
+
+n_share <- sum(dat %>% mutate(highlight = ifelse(`Share with Student Loan Debt, Communities of Color`>`Share with Student Loan Debt, Majority White Communities`, 1, 0)) %>% select(highlight), na.rm = TRUE)
+n_share_tot <- sum(dat %>% mutate(highlight = ifelse(`Share with Student Loan Debt, Communities of Color`>`Share with Student Loan Debt, Majority White Communities`, 1, 1)) %>% select(highlight), na.rm = TRUE)
+
+n_share
+n_share/n_share_tot
+
+
+```
+
+# Massachusetts
+
++ Suffolk county is highlighted in blue
+
+```{r}
+dat %>%
+  filter(state_name == "Massachusetts") %>%
+  mutate(highlight = ifelse(NAME == "Suffolk County, Massachusetts", 1, 0)) %>%
+  ggplot() +
+  geom_point(aes(y = `Median Student Loan Debt, All`, x = `Average household income, 2019 (ACS)`, color = highlight))+
+  theme(legend.position = "none") 
+
+
+```
+
++ the outlier on the bottom-right is nantucket county 
+
+# Some more graphs
+
+```{r}
+
+```
+
