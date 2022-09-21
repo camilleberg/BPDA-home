@@ -86,9 +86,43 @@ dat %>%
 
 + the outlier on the bottom-right is nantucket county 
 
-# Some more graphs
+What's interetsing about this is the measurement of income and not wealth  
+
+# Race
 
 ```{r}
 
+# dat %>%
+#  filter(state_name == "Massachusetts") %>%
+#  mutate(median_income_2019_acs = c(85042, 104007, 116351, 51952, 58895, ))
+
+
+
+```
+
+## Dumbbell graph
+
+```{r}
+dat %>%
+  filter(state_name == "Massachusetts") %>% 
+  mutate(NAME = sub(",.*", "", NAME)) %>%
+  mutate(highlight = ifelse(`Median Student Loan Debt, Communties of Color`>`Median Student Loan Debt, Majority White Communities`, "Higher", "Lower")) %>%
+  ggplot() +
+  geom_segment(aes(x = `Median Student Loan Debt, Communties of Color`, y = NAME, 
+                   xend = `Median Student Loan Debt, Majority White Communities`, yend = NAME,
+                   color = highlight), 
+               size = 3, 
+               alpha = 0.25) +
+  scale_color_manual(values = c("#003450", "#0fa6b4")) +
+  geom_point(aes(x = `Median Student Loan Debt, Communties of Color`, y = NAME), 
+             color = "#0fa6b4", size = 3)+
+  geom_point(aes(x = `Median Student Loan Debt, Majority White Communities`, y = NAME), 
+             color = "#003450", size = 3) +
+  theme(legend.position = "none", 
+        title = element_text(colour = "#003450"), 
+        axis.text = element_text(colour = "#003450")) +
+  labs(title = "Student Loan Debt", x = "Median Student Loan Debt ($)", y = "")
+
+  
 ```
 
