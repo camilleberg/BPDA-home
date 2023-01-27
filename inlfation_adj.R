@@ -9,7 +9,7 @@ library(readxl)
 library(lubridate)
 
 
-dat <- read.csv("F:/Deptment/Research/Data/MasterCard/MA_blockgroup-level_monthly_indices_2020-01-01_2022-04-17.csv")
+dat <- read.csv("C:/Users/camilleb/Box/Research/Active Projects/Mastercard/Request/New MD/boston_2022.11.07.csv")
 
 # this is to select for boston and not suffolk
 wb_name <- "C:/Users/camilleb/Box/Research/Active Projects/Greater_downtown_request_2022/All Boston (MA_blockgroup-level_weekly_indices_2020-01-01_2022-04-17).xlsm"
@@ -24,8 +24,8 @@ dat <- dat %>%
   mutate(txn_cnt = as.numeric(txn_cnt)) 
 
 #joining the tables for neighborhood analysis
-nbhds <-  rename(nbhds, geoid = `GEOID(2010_Census)`)
-dat_join <- left_join(dat, nbhds, "geoid") %>% filter(!is.na(bg10_nbhd)) # do later 
+# nbhds <-  rename(nbhds, geoid = `GEOID(2010_Census)`)
+# dat_join <- left_join(dat, nbhds, "geoid") %>% filter(!is.na(bg10_nbhd)) # do later 
   # this filters for just Boston and not Suffolk County
 
 # inflation adjusting the data
@@ -36,15 +36,28 @@ inflation_dat <- read_xlsx("C:/Users/camilleb/Box/Research/Active Projects/Maste
 industry_dat <- readxl::read_excel("C:/Users/camilleb/Box/Research/Active Projects/Mastercard/Program/Inflation/cpi-u-202206.xlsx", sheet = "index_wanted")
 
 # adjusting the inflation raw data
-inflation_dat_full <- inflation_dat %>%
+inflation_dat_full_raw <- inflation_dat %>%
   mutate(serial_no_1 = V1) %>%
   left_join(industry_dat %>% select(serial_no_1, industry), by = "serial_no_1") %>%
   select(-V1)
 
 # weighting the mwans for multi-item baskets 
-inflation_dat_full <-  inflation_dat_full %>%
+inflation_dat_full <-  inflation_dat_full_raw %>%
   group_by(industry, date) %>%
   summarise(inflation = weighted.mean(norm_value, rel_imp)) 
+
+# to compare overall spending inflation
+ret_combined <- inflation_dat_full_raw %>%
+  filter(industry != "ret") %>%
+  group_by(date) %>%
+  summarise(inflation = weighted.mean(norm_value, rel_imp)) 
+
+ret_all_items <- inflation_dat_full %>% filter(industry == "ret") %>% select(inflation)
+
+ret_compare <- cbind(ret_all_items, ret_combined)
+
+inflation_dat_full$inflation[inflation_dat_full$industry=="ret"] <- ret_combined$inflation
+
 
 # plotting the inlfation dat
 library(plotly)
@@ -58,8 +71,7 @@ inflation_dat_full %>%
 # length(unique(inflation_dat_full$industry)) * length(unique(inflation_dat_full$date))
 # checking the length =of the df is correct
 
-df <- dat_join
-rm(df)
+dat_join <- dat
 
 rate_fxn <- function(df, txn_type, nbhd = "all") {
   # if(nbhd == "all") {df <- df %>% filter(!is.na(bg10_nbhd))} else {df <- df %>% filter(bg10_nbhd %in% paste(nbhd))}
