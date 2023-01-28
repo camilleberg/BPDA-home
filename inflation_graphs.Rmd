@@ -108,3 +108,28 @@ graphing_fxn_ggplot("eap")
 # graphing_fxn("app")
 graphing_fxn_ggplot("app")
 ```
+
+# Adjusted Overall Spending
+
++ used weighted mean of selected items as "overall spending" inflation index instaed  of "All ITems"
+
+
+```{r}
+# loading in data
+txn_amt_adj <- read_xlsx(paste0(proj_folder_dir, "/in_person_spending_ret.xlsx"), sheet = "txn_amt_adj")
+txn_amt <- read_xlsx(paste0(proj_folder_dir, "/in_person_spending_ret.xlsx"), sheet = "txn_amt")
+txn_cnt <- read_xlsx(paste0(proj_folder_dir, "/in_person_spending_ret.xlsx"), sheet = "txn_cnt")
+
+spending_dat <- cbind(txn_cnt %>% mutate(txn_cnt = as.numeric(count)) %>% select(-count), 
+      txn_amt %>% mutate(txn_amt = as.numeric(count)) %>% select(txn_amt), 
+      txn_amt_adj %>% mutate(txn_amt_adj = as.numeric(count)) %>% select(txn_amt_adj))
+
+
+```
+
+## All Spending
+
+```{r}
+# graphing_fxn("ret")
+graphing_fxn_ggplot("ret")
+```
