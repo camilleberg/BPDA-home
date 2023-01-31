@@ -1,0 +1,178 @@
+---
+title: "Redlining - All Grades"
+author: "Camille Bergeron"
+date: "2023-01-31"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warnings = FALSE, message = FALSE)
+
+
+rm(list = ls())
+
+library(tidyverse)
+library(tidycensus)
+library(readxl)
+library(writexl)
+library(knitr)
+library(openxlsx)
+```
+
+# Redlining Data
+
+Pulling some demographic / descriptive variables and categorizing based off HOLC grades for Redlining Presentation for Black History Month 2023. 
+
+## Pulling the categorical data
+
+The spreadsheet created by Emily to classify census tracts
+
+```{r}
+# reading in data
+setwd("~/GitHub/BPDA-home/redlining")
+comp <- Sys.info()[7]
+proj_folder <- paste0("C:/Users/", comp, "/Box/Research/Active Projects/Black History Month_2023")
+
+tracts <- read_xlsx(paste0(proj_folder, "/03. Data/Redlining/2020Tracts_HOLC_AllGrades.xlsx"))
+
+# getting rid of extra column 
+head(tracts) %>% kable()
+
+```
+
+## The census data
+
+Now to look at specific variables. 
+
+```{r}
+VARS <- tidycensus::load_variables(dataset = 'acs5', year = 2021, cache = T)
+
+# specific variables being pulled 
+vars_pop <- c("B01001_001")
+vars_tenure <- c("B25003_001", "B25003_002")
+vars_race <- VARS$name[grepl("^B03002", VARS$name)][1:12]
+vars_poverty <- VARS$name[grepl("^B17001_", VARS$name)][c(1, 2, 31)]
+```
+
+
+```{r}
+
+# pulling the data
+census_vars <- tidycensus::get_acs(geography = "tract", 
+                                     variable = c(vars_pop, vars_tenure, vars_race, vars_poverty),
+                                     output = "wide",
+                                     state = "MA",
+                                     county = "Suffolk",
+                                     geometry = TRUE,
+                                     year = 2021,
+                                     cache_table = T,
+                                     show_call = TRUE) 
+
+# joining
+tracts_with_vars <- tracts %>%
+  left_join(y = census_vars %>%
+              select(!ends_with("M")), by = "GEOID") 
+
+# changing the NAs in the 1950s pop to 0 for calculatiosn later
+tracts_with_vars$pop1950[is.na(tracts_with_vars$pop1950)] <- 0
+
+# creatin gblank workbook
+redlined_data <- createWorkbook()
+
+# output function
+output_function <- function(df) {
+  write_xlsx(df, paste0(proj_folder, "/03. Data/output/", deparse(substitute(df)), ".xlsx"))
+  return(df %>% kable())
+}
+
+```
+
+
+
+### Population
+
+
+```{r}
+# library(conflicted)
+# conflict_prefer("rename", "plyr")
+population <- tracts_with_vars %>%
+  rename(pop2021 = B01001_001E) %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, pop1950, pop2021) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% 
+  mutate(perc_pop_change = (pop2021 / pop1950) - 1) 
+
+output_function(population)
+
+```
+
+### Tenure
+
+```{r}
+tenure <- tracts_with_vars %>%
+  rename(total_housing = B25003_001E) %>%
+  rename(owner_occ = B25003_002E) %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, total_housing, owner_occ) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% #
+  mutate(ownership_rate = owner_occ / total_housing)
+
+output_function(tenure)
+```
+
+
+
+### Race and Ethnicity
+
+Race and Ethnicity in 5 categories, counts: 
+
+```{r}
+# replacing some names 
+colnames(tracts_with_vars)[grepl("^B03002", colnames(tracts_with_vars))] <- gsub("Estimate!!Total:!!", "", VARS$label[grepl("^B03002", VARS$name)][1:12])
+
+race <- tracts_with_vars %>%
+  rename(White = `Not Hispanic or Latino:!!White alone`) %>%
+  rename(Black = `Not Hispanic or Latino:!!Black or African American alone`) %>%
+  mutate(APIA = `Not Hispanic or Latino:!!Asian alone` + `Not Hispanic or Latino:!!Native Hawaiian and Other Pacific Islander alone`) %>%
+  rename(AIAN = `Not Hispanic or Latino:!!American Indian and Alaska Native alone`) %>%
+  mutate(Other = `Not Hispanic or Latino:!!Some other race alone` + `Not Hispanic or Latino:!!Two or more races:`) %>%
+  rename(`Hispanic/Latino` = `Hispanic or Latino:`) %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, White, Black, APIA, AIAN, Other, `Hispanic/Latino`) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) 
+
+output_function(race)
+```
+
+Race and Ethnicity in 5 categories, as a share of each HOLC grade 
+
+```{r}
+race_grade_sums <-rowSums(race[, -1])
+for(i in 1:nrow(race)) {
+  total <- race_grade_sums[i]
+  for(j in 2:ncol(race)){
+    race[i, j] <- race[i, j] / total
+  }
+}
+
+race %>% kable()
+```
+
+### Poverty
+
+```{r}
+poverty <- tracts_with_vars %>%
+  rename(total = B17001_001E) %>%
+  rename(in_pov = B17001_002E) %>%
+  rename(above_pov = B17001_031E) %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, total, in_pov, above_pov) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
+  mutate(`Poverty Rate` = in_pov / total) %>%
+  select(-above_pov) 
+output_function(poverty)
+
+```
+
+
+
