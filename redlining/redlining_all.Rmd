@@ -52,6 +52,8 @@ vars_pop <- c("B01001_001")
 vars_tenure <- c("B25003_001", "B25003_002")
 vars_race <- VARS$name[grepl("^B03002", VARS$name)][1:12]
 vars_poverty <- VARS$name[grepl("^B17001_", VARS$name)][c(1, 2, 31)]
+vars_hhincome <- VARS$name[grepl("^B19001_", VARS$name)]
+vars_value <- VARS$name[grepl("^B25075_", VARS$name)]
 ```
 
 
@@ -59,7 +61,8 @@ vars_poverty <- VARS$name[grepl("^B17001_", VARS$name)][c(1, 2, 31)]
 
 # pulling the data
 census_vars <- tidycensus::get_acs(geography = "tract", 
-                                     variable = c(vars_pop, vars_tenure, vars_race, vars_poverty),
+                                     variable = c(vars_pop, vars_tenure, vars_race, vars_poverty, 
+                                                  vars_hhincome, vars_value),
                                      output = "wide",
                                      state = "MA",
                                      county = "Suffolk",
@@ -91,10 +94,9 @@ output_function <- function(df) {
 
 ### Population
 
++ I replaced some of the missing 1950 population values with 0 to use the summary values, but that kind of htrows off the % change (as I'm assuming some of the 2020 tracts in Boston were not "Boston" in 1950, or they weren't developed at all)
 
 ```{r}
-# library(conflicted)
-# conflict_prefer("rename", "plyr")
 population <- tracts_with_vars %>%
   rename(pop2021 = B01001_001E) %>%
   group_by(`HOLC Grade`) %>%
@@ -175,4 +177,23 @@ output_function(poverty)
 ```
 
 
+### Other
+
+- Also being pulled will be household income and value
+
+```{r, include = FALSE}
+hhincome <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, starts_with("B19001")) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) 
+
+output_function(hhincome)
+
+value <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, starts_with("B25075")) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) 
+
+output_function(value)
+```
 
