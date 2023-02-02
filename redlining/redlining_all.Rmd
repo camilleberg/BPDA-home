@@ -40,6 +40,18 @@ head(tracts) %>% kable()
 
 ```
 
+
+```{r}
+# adding in housing data from 1950
+
+housing1950 <- read_xlsx(paste0(proj_folder, "/03. Data/Redlining/population_1950_in_2020_tracts.xlsx"), sheet = "housing")
+
+# renaming
+colnames(housing1950)[2:6] <- paste0(colnames(housing1950)[2:6], "_1950")
+
+```
+
+
 ## The census data
 
 Now to look at specific variables. 
@@ -54,6 +66,10 @@ vars_race <- VARS$name[grepl("^B03002", VARS$name)][1:12]
 vars_poverty <- VARS$name[grepl("^B17001_", VARS$name)][c(1, 2, 31)]
 vars_hhincome <- VARS$name[grepl("^B19001_", VARS$name)]
 vars_value <- VARS$name[grepl("^B25075_", VARS$name)]
+vars_rent <- VARS$name[grepl("^B25063_", VARS$name)]
+vars_commute <- VARS$name[grepl("^B08303_", VARS$name)]
+vars_agg_hhinc <- VARS$name[grepl("^B19025_", VARS$name)]
+vars_educ <- VARS$name[grepl("^B15003_", VARS$name)]
 ```
 
 
@@ -62,7 +78,8 @@ vars_value <- VARS$name[grepl("^B25075_", VARS$name)]
 # pulling the data
 census_vars <- tidycensus::get_acs(geography = "tract", 
                                      variable = c(vars_pop, vars_tenure, vars_race, vars_poverty, 
-                                                  vars_hhincome, vars_value),
+                                                  vars_hhincome, vars_value, vars_rent, vars_commute, 
+                                                  vars_agg_hhinc, vars_educ),
                                      output = "wide",
                                      state = "MA",
                                      county = "Suffolk",
@@ -73,14 +90,12 @@ census_vars <- tidycensus::get_acs(geography = "tract",
 
 # joining
 tracts_with_vars <- tracts %>%
+  left_join(housing1950 %>% rename(GEOID = tract2020), by = c("GEOID")) %>%
   left_join(y = census_vars %>%
               select(!ends_with("M")), by = "GEOID") 
 
 # changing the NAs in the 1950s pop to 0 for calculatiosn later
 tracts_with_vars$pop1950[is.na(tracts_with_vars$pop1950)] <- 0
-
-# creatin gblank workbook
-redlined_data <- createWorkbook()
 
 # output function
 output_function <- function(df) {
@@ -91,10 +106,9 @@ output_function <- function(df) {
 ```
 
 
-
 ### Population
 
-+ I replaced some of the missing 1950 population values with 0 to use the summary values, but that kind of htrows off the % change (as I'm assuming some of the 2020 tracts in Boston were not "Boston" in 1950, or they weren't developed at all)
+***NOTE:*** I replaced some of the missing 1950 population values with 0 to use the summary values, but that kind of throws off the % change (as I'm assuming some of the 2020 tracts in Boston were not "Boston" in 1950, or they weren't developed at all)
 
 ```{r}
 population <- tracts_with_vars %>%
@@ -115,9 +129,13 @@ tenure <- tracts_with_vars %>%
   rename(total_housing = B25003_001E) %>%
   rename(owner_occ = B25003_002E) %>%
   group_by(`HOLC Grade`) %>%
-  select(`HOLC Grade`, total_housing, owner_occ) %>%
+  select(`HOLC Grade`, total_housing, owner_occ, totunits_1950, own_occ_1950) %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% #
-  mutate(ownership_rate = owner_occ / total_housing)
+  mutate(`Ownership Rate 1950` = own_occ_1950 / totunits_1950) %>%
+  mutate(`Ownership Rate 2021` = owner_occ / total_housing) %>%
+  mutate(`Change in units` = (total_housing/totunits_1950) - 1) %>%
+  mutate(`Change in ownership rate` = `Ownership Rate 2021` - `Ownership Rate 1950`) %>%
+  select(-c(owner_occ, own_occ_1950))
 
 output_function(tenure)
 ```
@@ -177,9 +195,39 @@ output_function(poverty)
 ```
 
 
+### Aggregate Hosuehold Income
+
+```{r}
+agg_hhinc <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  rename(`Aggregate Housheold Income` = B19025_001E) %>%
+  select(`HOLC Grade`, `Aggregate Housheold Income`) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) 
+
+output_function(agg_hhinc)
+```
+
+
+### Education
+
+```{r}
+# tibble(vars = colnames(tracts_with_vars)[grepl("^B15003", colnames(tracts_with_vars))], names = gsub("Estimate!!Total:!!", "", VARS$label[grepl("^B15003", VARS$name)]))
+
+# educ <- tracts_with_vars %>%
+  # mutate(`Less than HS` = rowSums(B15003_002E:B15003_016E)) %>%
+  # group_by(`HOLC Grade`) %>%
+  # select(`HOLC Grade`, starts_with("B15003")) %>%
+  # summarise(across(everything(), ~ sum(., is.na(.), 0))) 
+
+# output_function(population)
+```
+
+
+
+
 ### Other
 
-- Also being pulled will be household income and value
+- Also being pulled will be household income, value, and gross rent
 
 ```{r, include = FALSE}
 hhincome <- tracts_with_vars %>%
@@ -195,5 +243,25 @@ value <- tracts_with_vars %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) 
 
 output_function(value)
+
+rent <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, starts_with("B25063")) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) 
+
+output_function(rent)
+
+commute <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, starts_with("B08303")) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) 
+
+output_function(commute)
 ```
+
+```{r}
+medians <- read_xlsx(paste0(proj_folder, "/03. Data/output/medians.xlsx"), sheet = "medians")
+medians %>% kable()
+```
+
 
