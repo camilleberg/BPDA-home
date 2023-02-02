@@ -1,7 +1,7 @@
 ---
 title: "Redlining - All Grades"
 author: "Camille Bergeron"
-date: "2023-01-31"
+date: "February 2023"
 output: pdf_document
 ---
 
@@ -19,9 +19,15 @@ library(knitr)
 library(openxlsx)
 ```
 
+
++ January 31, 2023: added median values 
++ February 1, 2023: combining grades A and B
++ February 2, 2023: added more variables
+
 # Redlining Data
 
 Pulling some demographic / descriptive variables and categorizing based off HOLC grades for Redlining Presentation for Black History Month 2023. 
+
 
 ## Pulling the categorical data
 
@@ -34,6 +40,12 @@ comp <- Sys.info()[7]
 proj_folder <- paste0("C:/Users/", comp, "/Box/Research/Active Projects/Black History Month_2023")
 
 tracts <- read_xlsx(paste0(proj_folder, "/03. Data/Redlining/2020Tracts_HOLC_AllGrades.xlsx"))
+
+# combining A and B
+tracts <- tracts %>%
+  mutate(new_grade = ifelse(`HOLC Grade` %in% c("A", "B"), "A/B", `HOLC Grade`), .after = `HOLC Grade`) %>%
+  select(!`HOLC Grade`) %>%
+  rename(`HOLC Grade` = new_grade)
 
 # getting rid of extra column 
 head(tracts) %>% kable()
@@ -52,7 +64,7 @@ colnames(housing1950)[2:6] <- paste0(colnames(housing1950)[2:6], "_1950")
 ```
 
 
-## The census data
+## Census Data
 
 Now to look at specific variables. 
 
@@ -70,16 +82,17 @@ vars_rent <- VARS$name[grepl("^B25063_", VARS$name)]
 vars_commute <- VARS$name[grepl("^B08303_", VARS$name)]
 vars_agg_hhinc <- VARS$name[grepl("^B19025_", VARS$name)]
 vars_educ <- VARS$name[grepl("^B15003_", VARS$name)]
+vars_hhtype <- VARS$name[grepl("^B11001_", VARS$name)]
 ```
 
 
-```{r}
+```{r, include=FALSE}
 
 # pulling the data
 census_vars <- tidycensus::get_acs(geography = "tract", 
                                      variable = c(vars_pop, vars_tenure, vars_race, vars_poverty, 
                                                   vars_hhincome, vars_value, vars_rent, vars_commute, 
-                                                  vars_agg_hhinc, vars_educ),
+                                                  vars_agg_hhinc, vars_educ, vars_hhtype),
                                      output = "wide",
                                      state = "MA",
                                      county = "Suffolk",
@@ -108,7 +121,7 @@ output_function <- function(df) {
 
 ### Population
 
-***NOTE:*** I replaced some of the missing 1950 population values with 0 to use the summary values, but that kind of throws off the % change (as I'm assuming some of the 2020 tracts in Boston were not "Boston" in 1950, or they weren't developed at all)
+**NOTE:** I replaced some of the missing 1950 population values with 0 to use the summary values, but that kind of throws off the % change (as I'm assuming some of the 2020 tracts in Boston were not "Boston" in 1950, or they weren't developed at all)
 
 ```{r}
 population <- tracts_with_vars %>%
@@ -164,18 +177,21 @@ race <- tracts_with_vars %>%
 output_function(race)
 ```
 
-Race and Ethnicity in 5 categories, as a share of each HOLC grade 
+Race and Ethnicity in 5 categories, as a share of each HOLC grade:
 
 ```{r}
-race_grade_sums <-rowSums(race[, -1])
-for(i in 1:nrow(race)) {
-  total <- race_grade_sums[i]
-  for(j in 2:ncol(race)){
-    race[i, j] <- race[i, j] / total
+grade_shares_fxn <- function(df) {
+  df_sums <- rowSums(df[, -1])
+  for(i in 1:nrow(df)) {
+    total <- df_sums[i]
+    for(j in 2:ncol(df)){
+      df[i, j] <- df[i, j] / total
+    }
   }
+  return(df %>% kable())
 }
 
-race %>% kable()
+grade_shares_fxn(race)
 ```
 
 ### Poverty
@@ -211,23 +227,53 @@ output_function(agg_hhinc)
 ### Education
 
 ```{r}
-# tibble(vars = colnames(tracts_with_vars)[grepl("^B15003", colnames(tracts_with_vars))], names = gsub("Estimate!!Total:!!", "", VARS$label[grepl("^B15003", VARS$name)]))
+educ <- tracts_with_vars %>%
+  select(`HOLC Grade`, starts_with("B15003")) %>%
+  mutate(`Less than HS` = select(., B15003_002E:B15003_016E) %>% rowSums(na.rm = T)) %>%
+  mutate(`HS or equiv` = select(., B15003_017E:B15003_018E) %>% rowSums(na.rm = T)) %>%
+  mutate(`Some College` = select(., B15003_019E:B15003_021E) %>% rowSums(na.rm = T)) %>%
+  mutate(`BA+` = select(., B15003_022E:B15003_025E) %>% rowSums(na.rm = T)) %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, `Less than HS`:`BA+`) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) 
 
-# educ <- tracts_with_vars %>%
-  # mutate(`Less than HS` = rowSums(B15003_002E:B15003_016E)) %>%
-  # group_by(`HOLC Grade`) %>%
-  # select(`HOLC Grade`, starts_with("B15003")) %>%
-  # summarise(across(everything(), ~ sum(., is.na(.), 0))) 
 
-# output_function(population)
+output_function(educ)
+```
+
+Share by HOLC grade:
+
+```{r}
+grade_shares_fxn(educ)
+```
+
+### Household Type
+
+```{r}
+hhtype <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, starts_with("B11001")) %>%
+  rename(Married = B11001_003E) %>%
+  rename(`Male HH` = B11001_005E) %>%
+  rename(`Female HH` = B11001_006E) %>%
+  rename(`Non-family` = B11001_007E) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
+  select(`HOLC Grade`, Married, `Male HH`, `Female HH`, `Non-family`)
+
+output_function(hhtype)
+```
+
+Share by HOLC Grade: 
+
+```{r}
+grade_shares_fxn(hhtype)
 ```
 
 
+### Median Values
 
-
-### Other
-
-- Also being pulled will be household income, value, and gross rent
++ Also being pulled will be household income, value, and gross rent
++ The dollar values are in 2021$
 
 ```{r, include = FALSE}
 hhincome <- tracts_with_vars %>%
@@ -261,7 +307,47 @@ output_function(commute)
 
 ```{r}
 medians <- read_xlsx(paste0(proj_folder, "/03. Data/output/medians.xlsx"), sheet = "medians")
-medians %>% kable()
+
+medians$`MEDIAN VALUES (2021$)` %>% cbind(
+  medians %>%
+    select(!`MEDIAN VALUES (2021$)`) %>%
+    mutate_all(function(x) round(as.numeric(as.character(x)), 0))) %>%
+  kable()
+
 ```
 
+### Household Type
+
+```{r}
+
+```
+
+
+
+## Other Data Sources
+
+### Crime Rates
+
++ Looking at the crime rate per HOLC grading zones
++ The crime data comes from https://data.boston.gov/dataset/crime-incident-reports-august-2015-to-date-source-new-system
+- Used the data from 2021
+- dropped "NA" assigned HOLC grades, something to investigate later? 
+
+```{r}
+crime_by_tract <- read_xlsx(paste0(proj_folder, "/03. Data/input/crime_report_CT2020.xlsx"))
+
+
+# joining to grade data
+crimeRate <- crime_by_tract %>%
+  left_join(tracts %>% rename(GEOID20 = GEOID), by = "GEOID20") %>%
+  group_by(`HOLC Grade`) %>%
+  summarise(`Reported Crimes` = n()) %>%
+  drop_na() %>%
+  cbind(population$pop2021) %>%
+  rename(Population = `population$pop2021`) %>%
+  mutate(`Crime Rate` = `Reported Crimes` / Population)
+
+output_function(crimeRate)
+
+```
 
