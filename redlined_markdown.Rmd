@@ -17,6 +17,8 @@ rm(list = ls())
 
 ```
 
+# Redlined or Not Redlined
+
 ```{r}
 
 # reading in 
@@ -52,6 +54,12 @@ tracts_ownership <- redlined_tracts %>%
               mutate(ownership_rate = owner_occ / total_housing) %>%
               select(GEOID, ownership_rate), by = c("GEOID20" = "GEOID"))
 
+```
+
+## At 50% threshold
+
+```{r}
+
 # hypothesis testing
 
 # h0: m(nonredlined) - m(redlined) = 0
@@ -59,12 +67,32 @@ tracts_ownership <- redlined_tracts %>%
 
 t.test(tracts_ownership %>% filter(prop50 == "rl") %>% select(ownership_rate), 
        tracts_ownership %>% filter(prop50 != "rl") %>% select(ownership_rate))
+```
+
+## At 75% threshold
+
+```{r}
+
+# hypothesis testing
+
+# h0: m(nonredlined) - m(redlined) = 0
+# hA: m(nonredlined) - m(redlined) > 0 
 
 t.test(tracts_ownership %>% filter(prop75 == "rl") %>% select(ownership_rate), 
        tracts_ownership %>% filter(prop75 != "rl") %>% select(ownership_rate))
+```
+
+
+## At 90% threshold
+
+```{r}
+
+# hypothesis testing
+
+# h0: m(nonredlined) - m(redlined) = 0
+# hA: m(nonredlined) - m(redlined) > 0 
 
 t.test(tracts_ownership %>% filter(prop90 == "rl") %>% select(ownership_rate), 
        tracts_ownership %>% filter(prop90 != "rl") %>% select(ownership_rate))
-
 ```
 
