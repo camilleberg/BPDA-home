@@ -17,12 +17,15 @@ library(readxl)
 library(writexl)
 library(knitr)
 library(openxlsx)
+library(janitor)
 ```
 
 
 + January 31, 2023: added median values 
 + February 1, 2023: combining grades A and B
 + February 2, 2023: added more variables
++ February 6, 2023: added 1940 data
++ February 10, 2023: expanded out racial "other" category, cut tenure by race different ways
 
 # Redlining Data
 
@@ -54,12 +57,15 @@ head(tracts) %>% kable()
 
 
 ```{r}
-# adding in housing data from 1950
+# adding in housing data from 1940 and 1950
 
 housing1950 <- read_xlsx(paste0(proj_folder, "/03. Data/Redlining/population_1950_in_2020_tracts.xlsx"), sheet = "housing")
 
 # renaming
 colnames(housing1950)[2:6] <- paste0(colnames(housing1950)[2:6], "_1950")
+
+data1940 <- read_xlsx(paste0(proj_folder, "/03. Data/Redlining/population_1940_in_2020_tracts.xlsx"))
+colnames(data1940)[2:ncol(data1940)] <- paste0(colnames(data1940)[2:ncol(data1940)], "_1940")
 
 ```
 
@@ -83,6 +89,8 @@ vars_commute <- VARS$name[grepl("^B08303_", VARS$name)]
 vars_agg_hhinc <- VARS$name[grepl("^B19025_", VARS$name)]
 vars_educ <- VARS$name[grepl("^B15003_", VARS$name)]
 vars_hhtype <- VARS$name[grepl("^B11001_", VARS$name)]
+
+vars_tenure_race <- VARS$name[grepl("^B25003", VARS$name)]
 ```
 
 
@@ -92,7 +100,7 @@ vars_hhtype <- VARS$name[grepl("^B11001_", VARS$name)]
 census_vars <- tidycensus::get_acs(geography = "tract", 
                                      variable = c(vars_pop, vars_tenure, vars_race, vars_poverty, 
                                                   vars_hhincome, vars_value, vars_rent, vars_commute, 
-                                                  vars_agg_hhinc, vars_educ, vars_hhtype),
+                                                  vars_agg_hhinc, vars_educ, vars_hhtype, vars_tenure_race),
                                      output = "wide",
                                      state = "MA",
                                      county = "Suffolk",
@@ -103,6 +111,7 @@ census_vars <- tidycensus::get_acs(geography = "tract",
 
 # joining
 tracts_with_vars <- tracts %>%
+  left_join(data1940 %>% rename(GEOID = tract2020), by = "GEOID") %>%
   left_join(housing1950 %>% rename(GEOID = tract2020), by = c("GEOID")) %>%
   left_join(y = census_vars %>%
               select(!ends_with("M")), by = "GEOID") 
@@ -126,10 +135,13 @@ output_function <- function(df) {
 ```{r}
 population <- tracts_with_vars %>%
   rename(pop2021 = B01001_001E) %>%
+  rename(pop1940 = totpop_1940) %>%
   group_by(`HOLC Grade`) %>%
-  select(`HOLC Grade`, pop1950, pop2021) %>%
+  select(`HOLC Grade`, pop1940, pop1950, pop2021) %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% 
-  mutate(perc_pop_change = (pop2021 / pop1950) - 1) 
+  adorn_totals() %>%
+  mutate(`% Change 1940 - 2021` = (pop2021/pop1940) - 1) %>%
+  mutate(`% Change 1950 - 2021` = (pop2021 / pop1950) - 1) 
 
 output_function(population)
 
@@ -137,23 +149,192 @@ output_function(population)
 
 ### Tenure
 
+Housing Units: 
+
 ```{r}
-tenure <- tracts_with_vars %>%
+tenure_units <- tracts_with_vars %>%
   rename(total_housing = B25003_001E) %>%
   rename(owner_occ = B25003_002E) %>%
   group_by(`HOLC Grade`) %>%
-  select(`HOLC Grade`, total_housing, owner_occ, totunits_1950, own_occ_1950) %>%
+  select(`HOLC Grade`, totunits_1940, ownocc_1940, totunits_1950, own_occ_1950, total_housing, owner_occ) %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% #
+  adorn_totals() %>%
+  mutate(`% Change Units 1940 - 2021` = (total_housing/totunits_1940) - 1) %>%
+  mutate(`% Change Units 1950 - 2021` = (total_housing/totunits_1950) - 1) %>%
+  select(-c(owner_occ, own_occ_1950, ownocc_1940))
+
+
+output_function(tenure_units)
+```
+
+Ownership Rates: 
+
+
+```{r}
+
+tenure_ownership <- tracts_with_vars %>%
+  rename(total_housing = B25003_001E) %>%
+  rename(owner_occ = B25003_002E) %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, totunits_1940, ownocc_1940, totunits_1950, own_occ_1950, total_housing, owner_occ) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% #
+  adorn_totals() %>%
+  mutate(`Ownership Rate 1940` = ownocc_1940 / totunits_1940) %>%
   mutate(`Ownership Rate 1950` = own_occ_1950 / totunits_1950) %>%
   mutate(`Ownership Rate 2021` = owner_occ / total_housing) %>%
-  mutate(`Change in units` = (total_housing/totunits_1950) - 1) %>%
-  mutate(`Change in ownership rate` = `Ownership Rate 2021` - `Ownership Rate 1950`) %>%
-  select(-c(owner_occ, own_occ_1950))
+  mutate(`% Change in ownership rate 1940 - 2021` = `Ownership Rate 2021` - `Ownership Rate 1940`) %>%
+  mutate(`% Change in ownership rate 1950 - 2021` = `Ownership Rate 2021` - `Ownership Rate 1950`) %>%
+  select(-c(owner_occ, own_occ_1950, ownocc_1940, totunits_1940, totunits_1950, total_housing))
 
-output_function(tenure)
+output_function(tenure_ownership)
 ```
 
 
+Tenure by Race: 
+
++ 1940 Data
+
+_Here, ownership rate is owner-occupied units of the specified race/ethnicity over total housing units_
+
+```{r}
+tenure_1940 <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, totunits_1940, ownocc_1940, ownocc_white_1940, ownocc_black_1940, ownocc_oth_nw_1940) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% 
+  adorn_totals() %>%
+  mutate(`Ownership Rate - All` = ownocc_1940 / totunits_1940) %>%
+  mutate(`White Ownership Rate` = ownocc_white_1940 / totunits_1940) %>%
+  mutate(`Black Ownership Rate` = ownocc_black_1940 / totunits_1940) %>%
+  mutate(`Other Non-White Ownership Rate` = (ownocc_oth_nw_1940) / totunits_1940) %>%
+  select(!c(totunits_1940, ownocc_1940, ownocc_white_1940, ownocc_black_1940, ownocc_oth_nw_1940))
+  
+
+output_function(tenure_1940)
+```
+
++ 2021 Data:
+
+```{r}
+tenure_2021 <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  rename(tot_white = B25003H_001E, owner_white = B25003H_002E, 
+         tot_black = B25003B_001E, owner_black = B25003B_002E, 
+         tot_hisp = B25003I_001E, owner_hisp = B25003I_002E, 
+         tot_units_2021 = B25003_001E) %>%
+  mutate(tot_apia = B25003D_001E + B25003E_001E, 
+         owner_apia = B25003D_002E + B25003E_002E, 
+         tot_other = tot_units_2021 - tot_white - tot_black - tot_hisp - tot_apia, 
+         owner_other = B25003_002E - owner_apia - owner_white - owner_black - owner_hisp) %>%
+  select(`HOLC Grade`, tot_white, tot_black, tot_hisp, tot_apia, owner_white, owner_black, owner_hisp, owner_apia, owner_other, tot_units_2021) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% 
+  adorn_totals() %>%
+  mutate(`White Ownership Rate` = owner_white/tot_units_2021, 
+         `Black Ownership Rate` = owner_black/tot_units_2021, 
+         `APIA Ownership Rate` = owner_apia/tot_units_2021, 
+         `Hispanic/Latinx Ownership Rate` = owner_hisp/tot_units_2021, 
+         `Other OWnership Rate` = owner_other/tot_units_2021) %>%
+  select(!c(starts_with("tot_"), starts_with("owner_")))
+  
+output_function(tenure_2021)
+```
+
+
+
++ 1940 Data
+
+_Here, ownership rate is owner-occupied units of the specified race/ethnicity over total owner-occupied units units_
+
+```{r}
+tenure_owned_1940 <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, ownocc_1940, ownocc_white_1940, ownocc_black_1940, ownocc_oth_nw_1940) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% 
+  adorn_totals() %>%
+  mutate(`White Ownership Rate` = ownocc_white_1940 / ownocc_1940) %>%
+  mutate(`Black Ownership Rate` = ownocc_black_1940 / ownocc_1940) %>%
+  mutate(`Other Non-White Ownership Rate` = (ownocc_oth_nw_1940) / ownocc_1940) %>%
+  select(!c(ownocc_1940, ownocc_white_1940, ownocc_black_1940, ownocc_oth_nw_1940))
+  
+output_function(tenure_owned_1940)
+```
+
+
++ 2021 Data:
+
+```{r}
+tenure_owned_2021 <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  rename(tot_white = B25003H_001E, owner_white = B25003H_002E, 
+         tot_black = B25003B_001E, owner_black = B25003B_002E, 
+         tot_hisp = B25003I_001E, owner_hisp = B25003I_002E, 
+         tot_own_2021 = B25003_002E ,
+         tot_units_2021 = B25003_001E) %>%
+  mutate(tot_apia = B25003D_001E + B25003E_001E, 
+         owner_apia = B25003D_002E + B25003E_002E, 
+         tot_other = tot_units_2021 - tot_white - tot_black - tot_hisp - tot_apia, 
+         owner_other = tot_own_2021 - owner_apia - owner_white - owner_black - owner_hisp) %>%
+  select(`HOLC Grade`, tot_white, tot_black, tot_hisp, tot_apia, owner_white, owner_black, owner_hisp, owner_apia, owner_other, tot_own_2021) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% 
+  adorn_totals() %>%
+  mutate(`White Ownership Rate` = owner_white/tot_own_2021, 
+         `Black Ownership Rate` = owner_black/tot_own_2021, 
+         `APIA Ownership Rate` = owner_apia/tot_own_2021, 
+         `Hispanic/Latinx Ownership Rate` = owner_hisp/tot_own_2021, 
+         `Other OWnership Rate` = owner_other/tot_own_2021) %>%
+  select(!c(starts_with("tot_"), starts_with("owner_")))
+  
+output_function(tenure_owned_2021)
+```
+
+
++ 1940 Data
+
+_Here, ownership rate is owner-occupied units of the specified race/ethnicity over the population of that particular race/ethnicity_
+
+```{r}
+tenure_race_1940 <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  select(`HOLC Grade`, ownocc_white_1940, ownocc_black_1940, ownocc_oth_nw_1940, rentocc_white_1940, rentocc_black_1940, rentocc_oth_nw_1940) %>%
+  mutate(tot_white = ownocc_white_1940 + rentocc_white_1940, 
+         tot_black = ownocc_black_1940 + rentocc_black_1940, 
+         tot_other = ownocc_oth_nw_1940 + rentocc_oth_nw_1940) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% 
+  adorn_totals() %>%
+  mutate(`White Ownership Rate` = ownocc_white_1940 / tot_white) %>%
+  mutate(`Black Ownership Rate` = ownocc_black_1940 / tot_black) %>%
+  mutate(`Other Ownership Rate` = ownocc_oth_nw_1940 / tot_other) %>%
+  select(!c(starts_with("own"), ends_with("1940"), starts_with("tot")))
+  
+output_function(tenure_race_1940)
+```
+
+
++ 2021 Data:
+
+```{r}
+tenure_race_2021 <- tracts_with_vars %>%
+  group_by(`HOLC Grade`) %>%
+  rename(tot_white = B25003H_001E, owner_white = B25003H_002E, 
+         tot_black = B25003B_001E, owner_black = B25003B_002E, 
+         tot_hisp = B25003I_001E, owner_hisp = B25003I_002E, 
+         tot_own_2021 = B25003_002E ,
+         tot_units_2021 = B25003_001E) %>%
+  mutate(tot_apia = B25003D_001E + B25003E_001E, 
+         owner_apia = B25003D_002E + B25003E_002E, 
+         tot_other = tot_units_2021 - tot_white - tot_black - tot_hisp - tot_apia, 
+         owner_other = tot_own_2021 - owner_apia - owner_white - owner_black - owner_hisp) %>%
+  select(`HOLC Grade`, tot_white, tot_black, tot_hisp, tot_apia, tot_other, owner_white, owner_black, owner_hisp, owner_apia, owner_other, tot_own_2021) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>% 
+  adorn_totals() %>%
+  mutate(`White Ownership Rate` = owner_white/tot_white, 
+         `Black Ownership Rate` = owner_black/tot_black, 
+         `APIA Ownership Rate` = owner_apia/tot_apia, 
+         `Hispanic/Latinx Ownership Rate` = owner_hisp/tot_hisp, 
+         `Other Ownership Rate` = owner_other/tot_other) %>%
+  select(!c(starts_with("tot_"), starts_with("owner_")))
+  
+output_function(tenure_race_2021)
+```
 
 ### Race and Ethnicity
 
@@ -172,7 +353,8 @@ race <- tracts_with_vars %>%
   rename(`Hispanic/Latino` = `Hispanic or Latino:`) %>%
   group_by(`HOLC Grade`) %>%
   select(`HOLC Grade`, White, Black, APIA, AIAN, Other, `Hispanic/Latino`) %>%
-  summarise(across(everything(), ~ sum(., is.na(.), 0))) 
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
+  adorn_totals() 
 
 output_function(race)
 ```
@@ -194,6 +376,29 @@ grade_shares_fxn <- function(df) {
 grade_shares_fxn(race)
 ```
 
+**Race and Ethnicity Comparisons 1940 - 2021:**
+
+NOTE: "Non-White" includes Black 
+
+```{r}
+race_1940 <- tracts_with_vars %>% 
+  select(`HOLC Grade`, white_1940, nonwhite_1940, black_1940) %>%
+  group_by(`HOLC Grade`) %>%
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
+  adorn_totals() %>%
+  left_join(race %>%
+              mutate(`Non White` = Black + APIA + AIAN + Other + `Hispanic/Latino`) %>%
+              select(c(`HOLC Grade`, White, `Non White`, Black)), by = "HOLC Grade") %>%
+  mutate(`% Change White` = (White / white_1940) - 1) %>%
+  mutate(`% Change Non White` = (`Non White` / nonwhite_1940) -1) %>%
+  mutate(`% Change Black` = (Black / black_1940)-1)
+
+output_function(race_1940)
+  
+```
+
+
+
 ### Poverty
 
 ```{r}
@@ -204,6 +409,7 @@ poverty <- tracts_with_vars %>%
   group_by(`HOLC Grade`) %>%
   select(`HOLC Grade`, total, in_pov, above_pov) %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
+  adorn_totals() %>%
   mutate(`Poverty Rate` = in_pov / total) %>%
   select(-above_pov) 
 output_function(poverty)
@@ -235,7 +441,8 @@ educ <- tracts_with_vars %>%
   mutate(`BA+` = select(., B15003_022E:B15003_025E) %>% rowSums(na.rm = T)) %>%
   group_by(`HOLC Grade`) %>%
   select(`HOLC Grade`, `Less than HS`:`BA+`) %>%
-  summarise(across(everything(), ~ sum(., is.na(.), 0))) 
+  summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
+    adorn_totals() 
 
 
 output_function(educ)
@@ -258,6 +465,7 @@ hhtype <- tracts_with_vars %>%
   rename(`Female HH` = B11001_006E) %>%
   rename(`Non-family` = B11001_007E) %>%
   summarise(across(everything(), ~ sum(., is.na(.), 0))) %>%
+    adorn_totals() %>%
   select(`HOLC Grade`, Married, `Male HH`, `Female HH`, `Non-family`)
 
 output_function(hhtype)
@@ -316,13 +524,6 @@ medians$`MEDIAN VALUES (2021$)` %>% cbind(
 
 ```
 
-### Household Type
-
-```{r}
-
-```
-
-
 
 ## Other Data Sources
 
@@ -342,12 +543,14 @@ crimeRate <- crime_by_tract %>%
   left_join(tracts %>% rename(GEOID20 = GEOID), by = "GEOID20") %>%
   group_by(`HOLC Grade`) %>%
   summarise(`Reported Crimes` = n()) %>%
+      adorn_totals() %>%
   drop_na() %>%
   cbind(population$pop2021) %>%
   rename(Population = `population$pop2021`) %>%
-  mutate(`Crime Rate` = `Reported Crimes` / Population)
+  mutate(`Crime Rate` = `Reported Crimes` / Population) 
 
 output_function(crimeRate)
 
 ```
+
 
