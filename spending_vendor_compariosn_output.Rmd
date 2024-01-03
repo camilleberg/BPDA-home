@@ -1,0 +1,191 @@
+---
+title: "carto and MC comparison"
+author: "Camille Bergeron"
+date: "2023-09-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+{
+  library(readxl)
+  library(tidyverse)
+  library(plotly)
+  library(cluster)
+  library(e1071)
+  }
+
+```
+
+```{r}
+rm(list = ls())
+
+# reading in carto data 
+carto <- read_xlsx("C:/Users/camilleb/Box/Research/Active Projects/Mastercard/Request/Troubleshooting/tract_weekly_comp_2023.09.27.xlsx")
+MC <- read_xlsx("C:/Users/camilleb/Box/Research/Active Projects/Mastercard/Request/Troubleshooting/tract_weekly_comp_MC_2023.09.05.xlsx")
+
+crosswalk <- read_delim('https://www2.census.gov/geo/docs/maps-data/data/rel2020/tract/tab20_tract20_tract10_st25.txt', delim = "|")
+
+boston_tracts <- read_csv("C:/Users/camilleb/Documents/census/Census_R_Tool/Output/B01001_acs5_2021_tract20_boston.csv")
+
+crosswalk_boston <- left_join(crosswalk, boston_tracts %>% mutate(GEOID_TRACT_20 = as.double(GEOID)) %>%
+                                select(GEOID_TRACT_20, tract20, tract20_nbhd), by = 'GEOID_TRACT_20') %>%
+  filter(!is.na(tract20_nbhd))
+```
+
+```{r}
+# making merge file with just values and geoids
+df <- full_join(carto %>%
+                  filter(industry == "ret") %>%
+             mutate(tract_id = geoid) %>%
+               mutate(do_date = as.Date(do_date)) %>%
+             select(tract_id, do_date, txn_amt, txn_cnt), 
+           MC %>%
+             filter(geo_type == 'Msa', 
+                    industry == 'Total Retail') %>%
+             mutate(do_date = as.Date(paste(wk, yr, 'Sun'), '%U %Y %a')) %>%
+             select(tract_id, do_date, txn_amt, txn_cnt), by = c('do_date', 'tract_id'), suffix = c(".carto", ".MC"))
+
+```
+
+```{r}
+# this joins with 2010 and 202 tracts to check if there's any difference 
+x <- left_join(df, crosswalk_boston %>%
+              select(GEOID_TRACT_20, NAMELSAD_TRACT_20), by = c('tract_id'='GEOID_TRACT_20')) %>%
+   left_join(crosswalk_boston %>% 
+               mutate(GEOID_TRACT_10 = as.double(GEOID_TRACT_10)) %>% 
+               select(GEOID_TRACT_10, NAMELSAD_TRACT_10), 
+             by = c('tract_id'='GEOID_TRACT_10')) %>%
+  filter_at(vars(NAMELSAD_TRACT_20,NAMELSAD_TRACT_10),all_vars(!is.na(.)))
+
+# the tracts are the samme so it's all good
+length(x$NAMELSAD_TRACT_10 == x$NAMELSAD_TRACT_20) == nrow(x)
+```
+
+
+```{r}
+x %>%
+  plot_ly() %>%
+  add_trace(x= ~txn_amt.MC, 
+          y = ~ txn_amt.carto, name = 'Amount', 
+          text = ~tract_id) %>%
+  add_trace(x= ~txn_cnt.MC, 
+            y = ~ txn_cnt.carto, name = 'Count', 
+            text = ~tract_id)%>%
+  add_trace(x = ~txn_amt.MC, 
+            y = ~txn_amt.MC, mode = 'lines')
+```
+
+
+## checking for over time
+
+```{r}
+x<- x %>%
+  mutate(amt_comp = txn_amt.carto/txn_amt.MC, 
+         cnt_comp = txn_cnt.carto/txn_cnt.carto)
+
+x %>%
+  group_by(do_date) %>%
+  do(p = plot_ly(., x = ~txn_amt.MC, y = ~ txn_amt.carto, color = ~do_date, type = 'scatter')) %>%
+  subplot(nrows = 10, shareX = TRUE, shareY = TRUE)
+
+x %>%
+  mutate(tract_id = as.factor(tract_id)) %>%
+  plot_ly(x= ~do_date, 
+          y = ~amt_comp, color = ~tract_id, text = ~amt_comp) %>%
+  add_lines()  %>%
+  layout(title = "Carto Spending as a Share of MC by GEOID over Time ")
+```
+
++ the tract 25025081200 and 25025010405 is consistently above in all retail spending 
+
+```{r}
+x %>%
+  mutate(tract_id = as.factor(tract_id)) %>%
+  filter(amt_comp < 1) %>%
+  plot_ly(x= ~do_date, 
+          y = ~amt_comp, color = ~tract_id, text = ~amt_comp) %>%
+  add_lines() %>%
+  layout(title = "Carto Spending as a Share of MC by GEOID over Time (below 100%)")
+  
+```
+
++ tracts 25025051200, 2502509130, 25025010801 seem to be way below 
+
+# Clustering
+
+## k- means
+
+```{r}
+# it seems like there's three/four groups of comparisons between carto and MAstercard 
+
+x.model <-  kmeans(x %>% select(txn_amt.carto, txn_amt.MC) %>% drop_na(), 4)
+clusplot(x %>% select(txn_amt.carto, txn_amt.MC) %>% drop_na(), x.model$cluster)
+```
+
+
+## Linear Support Vector Classifier
+
++ https://www.datacamp.com/tutorial/support-vector-machines-r
++ https://stackoverflow.com/questions/34328105/how-to-build-multiclass-svm-in-r
+
+```{r}
+# creating randomized sample
+x_sample = x[sample(1:nrow(x), round(nrow(x)*0.05, 0)), ]
+
+# refomratting data based on tutorial
+x.lsv <- x_sample %>% mutate(txn_amt.carto = as.factor(txn_amt.carto)) %>% select(txn_amt.carto, txn_amt.MC)
+# x.svmfit <- svm(txn_amt.carto ~., data = x.lsv, kernal = "linear", scale = FALSE, probability = TRUE)
+x.svmfit <- read_rds("x.svmfit.RDS")
+x.svmfit
+
+# plot(x.svmfit, data= x.lsv, txn_amt.carto ~ txn_amt.MC)
+
+# pred_prob <- predict(x.svmfit, x, decision.values = TRUE, probability = TRUE)
+```
+
+## trying to manually selecting some groups
+
+```{r}
+
+x %>%
+  filter(amt_comp > 7) %>%
+  plot_ly() %>%
+  add_trace(x= ~txn_amt.MC, 
+          y = ~ txn_amt.carto, name = 'Amount', 
+          text = ~tract_id) %>%
+  add_trace(x = ~txn_amt.MC, 
+            y = ~(txn_amt.MC*12), mode = 'lines') %>%
+  layout(title = "Upper left section AMT comparison")
+```
+
+```{r}
+x %>%
+  filter(amt_comp > 7) %>%
+  left_join(crosswalk_boston %>% mutate(tract_id = GEOID_TRACT_20), by = "tract_id") %>%
+  group_by(tract20_nbhd) %>%
+  summarise(n = n())
+
+```
+
+```{r}
+library(tidycensus)
+boston_data <- get_acs(geography = 'tract', variable = "B01001_001E", state = 'MA', county = "Suffolk", geometry = TRUE)
+
+ggplot(boston_data) +
+  geom_sf(aes(geometry= geometry))
+
+y <- boston_data %>% mutate(tract_id = as.double(GEOID)) %>%
+  left_join(x, by = "tract_id") %>%
+  filter(!is.na(amt_comp)) %>%
+  ggplot() +
+  geom_sf(aes(geometry= geometry))
+```
+
+
+# looking at yoy comparisons
+
++ MC provides YOY comparisons but Carto doesn't 
++ could do a historical comparison 
+
+
