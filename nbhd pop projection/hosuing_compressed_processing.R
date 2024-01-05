@@ -17,7 +17,12 @@ rm(list = ls())
   library(tigris)
   #remotes::install_github("walkerke/tigris")
   library(MazamaLocationUtils)
+  library(sjmisc)
+  library(writexl)
+  library(xlsx)
+  
 }
+
 
 # reading in crosswalk files
 username <- Sys.info()["user"]
@@ -26,6 +31,7 @@ box_dir = paste0("C:/Users/", username, "/Box/Research/Active Projects/Neighborh
 working_dir = paste0("/Users/", username, "/Documents/GitHub/BPDA-home/nbhd pop projection")
 
 TRACT_20 = read.xlsx(paste0(working_dir, '/tract20_nbhd20_crosswalk_DOT_split.xlsx'))
+NBHD <- tibble(nbhd = unique(TRACT_20$nbhd))
 
 # reading in housing data
 housing_df = read.xlsx(paste0(working_dir, "/Compressed Housing Master 11-30-23.xlsx"))
@@ -129,7 +135,7 @@ housing_edit[grepl("2 Northdale TE", housing_edit$Project),]$address <- "2 North
 
 
 # cleaning data for incorrect lat/long pairs 
-housing_edit_geocoded <- rbind(housing_edit, housing_df_bg[which(is.na(housing_df_bg$bg20)), ]) %>%
+housing_edit_geocoded <- rbind(housing_edit %>% mutate(bg20 = NA), housing_df_bg[which(is.na(housing_df_bg$bg20)), ]) %>%
   geocode(address, method = 'osm', lat = lat_new , long = long_new) %>%
   mutate(LAT = lat_new, LONG = long_new) %>%
   select(-c(lat_new, long_new))
@@ -145,21 +151,86 @@ housing_df_bg[(housing_df_bg$Project %in% housing_edit_bg20$Project) &
 housing_all_bg <- housing_df_bg %>%
   rbind(housing_edit_bg20[(housing_edit_bg20$Project %in% housing_edit$Project), ])
 
-###### assigning tracts to nbhds ------------------------------------------------
+###### assigning tracts to nbhds ad cleaning------------------------------------------------
 
+# joingin to nbhd table
 housing_nbhd <- housing_all_bg %>%
   mutate(tract20 = substr(bg20, 1, 11)) %>%
   left_join(TRACT_20 %>%
               mutate(tract20 = as.character(geoid20)) %>%
               select(!geoid20), by = "tract20")
 
-housing_nbhd %>%
-  mutate(hhtype_1 = ifelse(`0BR` == "-", 0, as.numeric(`0BR`)) + ifelse(`1BR` == "-", 0, as.numeric(`1BR`)), 
-         hhtype_2 = ifelse(`2BR` == "-", 0, as.numeric(`2BR`)), 
-         hhtype_3 = ifelse(`3+BR` == "-", 0, as.numeric(`3+BR`)), 
-         New.Units = ifelse(New.Units == "-", 0, as.numeric(New.Units)), 
-         New.SF = ifelse(New.SF == "-", 0, as.numeric(New.SF))) %>%
-  group_by(nbhd) %>%
-  summarize(n = sum(New.Units))
+# changing data types and dealing  bedroom / size classifications
+HOUSING_clean <- housing_nbhd %>%
+  mutate_at(vars(ends_with("BR") | starts_with("New.")), as.numeric) %>%
+  mutate(hhtype_1 = ifelse(is.na(`0BR`), 0, `0BR`) + ifelse(is.na(`1BR`), 0, `2BR`), 
+         hhtype_2 = ifelse(is.na(`2BR`), 0, `2BR`), 
+         hhtype_3 = ifelse(is.na(`3+BR`), 0, `3+BR`)) %>%
+  mutate(size = 
+           case_when(
+             New.SF < 50000 ~ "small", 
+             New.SF >= 50000 ~ "large", 
+             is.na(New.SF) & New.Units <50 ~ "small", 
+             is.na(New.SF) & New.Units >= 50 ~ "large"
+           )) %>%
+  select(!(ends_with("BR") | ends_with("20"))) %>%
+  select(-c(address, Reporting.Category, LAT, LONG, New.SF))
 
-df %>% mutate_at(c('col1', 'col2'), as.numeric)
+###### assigning tracts to nbhds ad cleaning------------------------------------------------
+
+housing_bdrm <- HOUSING_clean %>%
+  mutate(complete.year = format(Complete.Date, "%Y"), 
+         complete.quarter = quarter(Complete.Date)) %>%
+  pivot_longer(cols = starts_with("hhtype"), names_to = "hhtype", values_to = "bdrm.units") %>%
+  group_by(complete.year, complete.quarter, nbhd, hhtype) %>%
+  summarise(new_bdrm_units = sum(bdrm.units), new_units = sum(New.Units)) 
+
+
+
+###### pulling data for specific purposes ------------------------------------------------
+
+# financial quarter andd year to pull
+update_time <- c("2023", "3")
+
+# quarterly completions for updates 
+new_construction <- housing_bdrm %>% 
+  filter(complete.year == update_time[1], complete.quarter == update_time[2]) %>%
+  pivot_wider(names_from = c(hhtype), values_from = new_bdrm_units) %>%
+  mutate(hhtype_units = rowSums(across(contains("hhtype"))), 
+         diff_units = new_units - hhtype_units) 
+
+# cleaning the data to account for missing bdrm info 
+new_construction_dist <- new_construction %>%
+  mutate(all_1 = sum(.[[6]]), all_2 = sum(.[[7]]), all_3 = sum(.[[8]]), all_units = sum(.[[5]])) %>%
+  mutate(across(contains("hhtype"), ~. / hhtype_units * new_units)) %>%
+  mutate(across(contains("all"), ~. / all_units * new_units)) %>%
+  mutate(hhtype_1 = ifelse(is.nan(hhtype_units), all_1, hhtype_1), 
+         hhtype_2 = ifelse(is.nan(hhtype_units), all_2, hhtype_2), 
+         hhtype_3 = ifelse(is.nan(hhtype_units), all_3, hhtype_3)) %>%
+  select(!(ends_with("units") | starts_with("all"))) %>%
+  full_join(NBHD, by = "nbhd") %>%
+  arrange(nbhd)
+  
+### FORECAST %
+
+# small completions for weighted average of forecast %
+
+small_hist_completions <- HOUSING_clean %>%
+  filter(size == "small", !is.na(Complete.Date)) %>%
+  mutate(complete.year = format(Complete.Date, "%Y"), 
+         complete.quarter = quarter(Complete.Date)) %>%
+  pivot_longer(cols = starts_with("hhtype"), names_to = "hhtype", values_to = "bdrm.units") %>%
+  group_by(nbhd, hhtype) %>%
+  summarise(new_bdrm_units = sum(bdrm.units), new_units = sum(New.Units))  %>%
+  pivot_wider(names_from = c(hhtype), values_from = new_bdrm_units) %>%
+  mutate(hhtype_units = rowSums(across(contains("hhtype"))), 
+         diff_units = new_units - hhtype_units) %>%
+  mutate(all_1 = sum(.[[3]]), all_2 = sum(.[[4]]), all_3 = sum(.[[5]]), all_units = sum(.[[2]])) %>%
+  mutate(across(contains("hhtype"), ~. / hhtype_units * new_units)) %>%
+  mutate(across(contains("all"), ~. / all_units * new_units)) %>%
+  mutate(hhtype_1 = ifelse(is.nan(hhtype_units), all_1, hhtype_1), 
+         hhtype_2 = ifelse(is.nan(hhtype_units), all_2, hhtype_2), 
+         hhtype_3 = ifelse(is.nan(hhtype_units), all_3, hhtype_3)) %>%
+  select(!(ends_with("units") | starts_with("all"))) %>%
+  full_join(NBHD, by = "nbhd") %>%
+  arrange(nbhd)
