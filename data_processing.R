@@ -37,7 +37,7 @@ NBHD <- tibble(nbhd = unique(TRACT_20$nbhd))
 # getting most recent housing file
 
 ### CHANGE #####
-recent_housing_file <- "Compressed Housing Master 11-30-23.xlsx"
+recent_housing_file <- "Compressed Housing Master 12-31-23.xlsx"
 
 output_file_date <- str_split(recent_housing_file, " ")[[1]][4]
 
@@ -52,13 +52,12 @@ source('data_process_fxns.R')
 
 ## processing the data
 
-housing_df <- rbind(permitted_df, pipeline_df)
 
 # first filtering got correct reporting agency (new units bascially)
 rep_cat <- c("G/N", "N")
 
 # assigning addressee to entire df and creating address column 
-housing_df <- rbind(permitted_df %>% assign_address() %>% mutate(df = "permitted"), 
+housing_df <- rbind(permitted_df %>% mutate(Street = Street.Name) %>% assign_address() %>% mutate(df = "permitted"), 
       pipeline_df %>% mutate(Street = Street.Name) %>% assign_address() %>% mutate(df = "pipeline")) %>%
       filter(Reporting.Category %in% rep_cat)
 
@@ -81,6 +80,7 @@ housing_edit[grepl("Dewey", housing_edit$Project),]$address <- "21 Danube St, Bo
 housing_edit <- housing_edit %>%
   filter(Project != "Suffolk Downs Phase 4", # this is added later on 
          Project != "Safe Haven") # no available address
+housing_edit[grepl("15 Wichita", housing_edit$Project),]$address <- "15 Wichita Terrace, Boston, MA"
 
 # geocoding the new address
 housing_edit_xy <- housing_edit %>% assign_lat_long()
@@ -93,21 +93,23 @@ housing_coords <- housing_xy %>%
   # this is the same projection as the  tract data
   
 # pulling census data for polygons 
-acs2020_pop <- tidycensus::get_acs(geography = "tract", 
-                                   variable = "B01001_001",
-                                   output = "wide",
-                                   state = "MA",
-                                   county = "Suffolk",
-                                   geometry = TRUE,
-                                   year = 2022,
-                                   cache_table = T,
-                                   show_call = TRUE) %>% 
-  filter(!(str_detect(NAME,"Census Tract 99")|str_detect(NAME,"Census Tract 18")
-           |str_detect(NAME,"Census Tract 17")|str_detect(NAME,"Census Tract 16")
-           |str_detect(NAME,"Census Tract 9812.01")|str_detect(NAME,"Census Tract 9801.01"))) %>%
-  select(!ends_with("M"))
+# acs2020_pop <- tidycensus::get_acs(geography = "tract", 
+#                                    variable = "B01001_001",
+#                                    output = "wide",
+#                                    state = "MA",
+#                                    county = "Suffolk",
+#                                    geometry = TRUE,
+#                                    year = 2022,
+#                                    cache_table = T,
+#                                    show_call = TRUE) %>% 
+#   filter(!(str_detect(NAME,"Census Tract 99")|str_detect(NAME,"Census Tract 18")
+#            |str_detect(NAME,"Census Tract 17")|str_detect(NAME,"Census Tract 16")
+#            |str_detect(NAME,"Census Tract 9812.01")|str_detect(NAME,"Census Tract 9801.01"))) %>%
+#   select(!ends_with("M"))
+# 
+# write_rds(acs2020_pop, paste0(working_dir, "/boston_ct2020.RDS"))
 
-write_rds(acs2020_pop, paste0(working_dir, "boston_ct2020.RDS"))
+acds2020_pop <- read_rds(paste0(working_dir, "/boston_ct2020.RDS"))
 
 # checking the projection coordinate
 st_crs(acs2020_pop)
@@ -131,7 +133,7 @@ housing_with_vars <- housing_tracts %>% assign_size() %>% assign_bdrm() %>%
   select(-c(geometry, GEOID, NAME, B01001_001E, ))
 
 # last recently completed quarter
-completed_date <- max(hosuing_with_vars$Complete.Date, na.rm = TRUE)
+completed_date <- max(housing_with_vars$Complete.Date, na.rm = TRUE)
 completed_quarter <- as.Date(cut(completed_date, "quarter"))-1
 completed_quarter_filt <- c(format(completed_quarter, "%Y"), quarter(completed_quarter))
 

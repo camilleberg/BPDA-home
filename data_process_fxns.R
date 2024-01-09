@@ -75,6 +75,7 @@ get_new_bdrm_dist <- function(df) {
     
     # assigning tracts to nbhds and cleaning -- aggregates by project to get counts by nbhd 
     # for new units  
+    pivot_longer(cols = starts_with("hhtype"), names_to = "hhtype", values_to = "bdrm.units") %>%
     
   group_by(nbhd, hhtype) %>%
     summarize(new_bdrm_units = sum(bdrm.units), 
