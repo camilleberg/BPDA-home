@@ -153,13 +153,18 @@ housing_nbhd <- housing_all_bg %>%
               mutate(tract20 = as.character(geoid20)) %>%
               select(!geoid20), by = "tract20")
 
-housing_nbhd %>%
+x <- housing_nbhd %>%
   mutate(hhtype_1 = ifelse(`0BR` == "-", 0, as.numeric(`0BR`)) + ifelse(`1BR` == "-", 0, as.numeric(`1BR`)), 
          hhtype_2 = ifelse(`2BR` == "-", 0, as.numeric(`2BR`)), 
          hhtype_3 = ifelse(`3+BR` == "-", 0, as.numeric(`3+BR`)), 
          New.Units = ifelse(New.Units == "-", 0, as.numeric(New.Units)), 
          New.SF = ifelse(New.SF == "-", 0, as.numeric(New.SF))) %>%
-  group_by(nbhd) %>%
-  summarize(n = sum(New.Units))
+  select(!ends_with("BR"))
 
-df %>% mutate_at(c('col1', 'col2'), as.numeric)
+y <- x %>%
+  pivot_longer(cols = starts_with("hhtype"), names_to = "hhtype", values_to = "number_units") %>%
+  case_when(
+    
+  )
+
+
