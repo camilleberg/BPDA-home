@@ -21,6 +21,7 @@ rm(list = ls())
   library(sjmisc)
   library(writexl)
   library(sf)
+  library(xlsx)
 }
 
 
@@ -134,7 +135,7 @@ housing_with_vars <- housing_tracts %>% assign_size() %>% assign_bdrm() %>%
 
 # last recently completed quarter
 completed_date <- max(housing_with_vars$Complete.Date, na.rm = TRUE)
-completed_quarter <- as.Date(cut(completed_date, "quarter"))-1
+completed_quarter <- as.Date(cut(completed_date, "quarter"))
 completed_quarter_filt <- c(format(completed_quarter, "%Y"), quarter(completed_quarter))
 
 ## 1. under construction (permitted but not yet completed) for all nbhds by bedroom
@@ -174,24 +175,31 @@ output_large_pipeline <- housing_with_vars %>%
   summarise(new_units = sum(New.Units))
 
 ### 3.d. making one sheet
-output_forecast <- output_small_hist %>% rename(sm_hist = new_units) %>%
-  left_join(output_small_permit %>% rename(sm_permit = new_units)) %>%
-  left_join(output_large_pipeline %>% rename(lg_pipeline = new_units)) %>%
+output_forecast <- output_small_hist %>% 
+  rename(sm_hist = new_units) %>%
+  st_drop_geometry() %>%
+  left_join(output_small_permit %>% 
+              rename(sm_permit = new_units) %>%
+              st_drop_geometry()) %>%
+  left_join(output_large_pipeline %>% rename(lg_pipeline = new_units) %>%
+              st_drop_geometry()) %>%
   mutate_at(c('sm_hist','sm_permit', 'lg_pipeline'), ~tidyr::replace_na(.,0)) %>%
   mutate(sm = sm_hist + sm_hist, 
-         forecast_num = sm * 0.28 + lg_pipeline * 0.72, 
-         all = sum(forecast_num), 
-         forecast_share = forecast_num / all) %>%
-  select(nbhd, sm, lg_pipeline, forecast_num, forecast_share)
+         all_sm = sum(sm), all_lg = sum(lg_pipeline),
+         sm_share = sm / all_sm, lg_share = lg_pipeline / all_lg, 
+         forecast_share = sm_share * 0.28 + lg_share * 0.72) %>%
+  select(nbhd, sm, lg_pipeline, forecast_share)
 
 # writing out to one excel sheet 
+file_name <- paste0(working_dir, "/output_using_", output_file_date)
 
-  file_name <- paste0(working_dir, "/output_using_", output_file_date)
-
-  write.xlsx("dkfhkjdfh", file = file_name, sheetName = "Explanation")
-  write.xlsx(output_constr, file = file_name, sheetName = "Under Construction", append = TRUE)
-  write.xlsx(output_quartely_compl, file = file_name, 
-             sheetName = paste0("Quarterly Completions ", completed_quarter_filt[1], " Q", 
-                                completed_quarter_filt[2]), append = TRUE)
-  write.xlsx(output_forecast, file = file_name, sheetName = "Forecast %", append = TRUE)
+library(openxlsx)
+  
+sheet_name_quarter = paste0("Quarterly Completions ", completed_quarter_filt[1], " Q", completed_quarter_filt[2])
+  
+dataset_names <- list("Explanation" = paste("dssdds", sheet_name_quarter), 
+                      "Under Construction" = output_constr,   
+                      "Quarterly completions" = output_quartely_compl, 
+                      "Forecast %" = output_forecast)
+write.xlsx(dataset_names, file = file_name)
 
