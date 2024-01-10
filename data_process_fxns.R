@@ -78,17 +78,17 @@ get_new_bdrm_dist <- function(df) {
     pivot_longer(cols = starts_with("hhtype"), names_to = "hhtype", values_to = "bdrm.units") %>%
     
   group_by(nbhd, hhtype) %>%
-    summarize(new_bdrm_units = sum(bdrm.units), 
-              new_units = sum(New.Units)) %>%
+    summarize(new_bdrm_units = sum(bdrm.units, na.rm = T), 
+              new_units = sum(New.Units, na.rm = T)) %>%
     pivot_wider(names_from = c(hhtype), values_from = new_bdrm_units) %>%
     mutate(hhtype_units = rowSums(across(contains("hhtype"))), 
            diff_units = new_units - hhtype_units) %>%
     
     # aggregating to get citywide dist
-    mutate(all_1 = sum(.[[3]]), 
-           all_2 = sum(.[[4]]), 
-           all_3 = sum(.[[5]]), 
-           all_units = sum(.[[2]])) %>%
+    mutate(all_1 = sum(.[[3]], na.rm = T), 
+           all_2 = sum(.[[4]], na.rm = T), 
+           all_3 = sum(.[[5]], na.rm = T), 
+           all_units = sum(.[[2]], na.rm = T)) %>%
     
     # getting dist for each nbhd
     mutate(across(contains("hhtype"), ~. / hhtype_units * new_units), 

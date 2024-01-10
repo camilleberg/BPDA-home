@@ -21,7 +21,7 @@ rm(list = ls())
   library(sjmisc)
   library(writexl)
   library(sf)
-  library(xlsx)
+  library(openxlsx)
 }
 
 
@@ -58,14 +58,21 @@ source('data_process_fxns.R')
 rep_cat <- c("G/N", "N")
 
 # assigning addressee to entire df and creating address column 
-housing_df <- rbind(permitted_df %>% mutate(Street = Street.Name) %>% assign_address() %>% mutate(df = "permitted"), 
-      pipeline_df %>% mutate(Street = Street.Name) %>% assign_address() %>% mutate(df = "pipeline")) %>%
-      filter(Reporting.Category %in% rep_cat)
+# also filtering for proper reporting vategories 
+housing_df <- rbind(permitted_df %>% 
+                      mutate(Street = Street.Name) %>% 
+                      assign_address() %>% mutate(df = "permitted"), 
+                    pipeline_df %>% 
+                      mutate(Street = Street.Name) %>% 
+                      assign_address() %>% mutate(df = "pipeline")) %>%
+                    filter(Reporting.Category %in% rep_cat)
 
 # assigning new lat longs
 housing_xy <- housing_df %>% assign_lat_long()
 
 # manually cleaning
+
+## think about putting tis in a spreadhseet and readng it in (to manually edit externally)
 housing_edit <- housing_xy[which(is.na(housing_xy$LAT)),]
 housing_edit[grepl("Showa", housing_edit$Project),]$address <- "420 Pond St, Boston, MA"
 housing_edit[grepl("2 Northdale TE", housing_edit$Project),]$address <- "2 Northdale Terrace, Boston, MA"
@@ -192,9 +199,6 @@ output_forecast <- output_small_hist %>%
 
 # writing out to one excel sheet 
 file_name <- paste0(working_dir, "/output_using_", output_file_date)
-
-library(openxlsx)
-  
 sheet_name_quarter = paste0("Quarterly Completions ", completed_quarter_filt[1], " Q", completed_quarter_filt[2])
   
 dataset_names <- list("Explanation" = paste("dssdds", sheet_name_quarter), 
